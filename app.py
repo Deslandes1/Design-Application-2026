@@ -1,8 +1,7 @@
 import streamlit as st
 import requests
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 import io
-import base64
 import random
 import time
 import urllib.parse
@@ -91,6 +90,18 @@ prompt = st.text_area("Enter your design prompt", height=100,
                       value=st.session_state.get("prompt", ""),
                       key="prompt_input")
 
+# ====== TEXT OVERLAY SETTINGS ======
+st.markdown("### ✏️ Text Overlay (optional)")
+col1, col2 = st.columns(2)
+with col1:
+    overlay_title = st.text_input("Title text", placeholder="e.g. Be Like Brit Summer 2026")
+    overlay_subtitle = st.text_input("Subtitle text", placeholder="e.g. Design Class by Venite")
+with col2:
+    title_font_size = st.slider("Title font size", 20, 200, 80, step=5)
+    subtitle_font_size = st.slider("Subtitle font size", 20, 150, 50, step=5)
+    text_color = st.color_picker("Text color", "#FFFFFF")
+    text_position = st.selectbox("Position", ["Top", "Center", "Bottom"])
+
 col_gen, col_clear = st.columns([4, 1])
 with col_gen:
     generate = st.button("🚀 Generate Design", use_container_width=True)
@@ -102,14 +113,12 @@ with col_clear:
 
 # ====== GENERATION LOGIC ======
 def enhance_prompt(prompt):
-    """Append quality keywords to improve output."""
     quality_keywords = "high quality, professional, detailed, 8k, sharp focus, vibrant colors"
     if not any(kw in prompt.lower() for kw in ["high quality", "professional", "detailed", "8k"]):
         prompt = f"{prompt}, {quality_keywords}"
     return prompt
 
 def generate_image(prompt, width, height, style):
-    """Generate image using Pollinations.ai with enhanced prompt."""
     style_map = {
         "Cinematic": "cinematic",
         "Anime": "anime",
@@ -119,7 +128,6 @@ def generate_image(prompt, width, height, style):
         "3D Render": "3d+render",
     }
     style_param = style_map.get(style, "")
-    # Enhance the prompt
     enhanced_prompt = enhance_prompt(prompt)
     if style_param:
         enhanced_prompt = f"{enhanced_prompt}, {style_param} style"
@@ -136,8 +144,46 @@ def generate_image(prompt, width, height, style):
         st.error(f"Connection error: {e}")
         return None
 
+def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position):
+    """Overlay text on the image with chosen position."""
+    img = img.copy()
+    draw = ImageDraw.Draw(img)
+    try:
+        title_font = ImageFont.truetype("arial.ttf", title_size)
+        subtitle_font = ImageFont.truetype("arial.ttf", subtitle_size)
+    except:
+        title_font = ImageFont.load_default()
+        subtitle_font = ImageFont.load_default()
+    
+    w, h = img.size
+    # Determine vertical start
+    if position == "Top":
+        y = int(h * 0.10)
+    elif position == "Bottom":
+        y = int(h * 0.75)
+    else:  # Center
+        y = int(h * 0.40)
+    
+    # Draw title
+    if title:
+        # Measure text
+        bbox = draw.textbbox((0,0), title, font=title_font)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+        x = (w - tw) // 2
+        draw.text((x, y), title, font=title_font, fill=color, stroke_width=2, stroke_fill="black")
+        y += th + 10
+    # Draw subtitle
+    if subtitle:
+        bbox = draw.textbbox((0,0), subtitle, font=subtitle_font)
+        sw = bbox[2] - bbox[0]
+        sh = bbox[3] - bbox[1]
+        x = (w - sw) // 2
+        draw.text((x, y), subtitle, font=subtitle_font, fill=color, stroke_width=2, stroke_fill="black")
+    
+    return img
+
 def add_background(img, bg_color, output_size=(1200, 1200)):
-    """Place generated image on a colored background sheet."""
     canvas = Image.new('RGB', output_size, bg_color)
     img_w, img_h = img.size
     x = (output_size[0] - img_w) // 2
@@ -145,11 +191,14 @@ def add_background(img, bg_color, output_size=(1200, 1200)):
     canvas.paste(img, (x, y))
     return canvas
 
-# ====== GENERATE ======
 if generate and prompt:
     with st.spinner("🎨 Creating your design..."):
         img = generate_image(prompt, width, height, style)
         if img:
+            # Apply text overlay if any text is provided
+            if overlay_title or overlay_subtitle:
+                img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
+            
             st.markdown("### ✨ Generated Design")
             col_display, col_info = st.columns([2, 1])
             with col_display:
@@ -194,19 +243,17 @@ if generate and prompt:
             if len(st.session_state.history) > 20:
                 st.session_state.history = st.session_state.history[-20:]
 
-# ====== HISTORY GALLERY with Delete Option ======
+# ====== HISTORY GALLERY ======
 if "history" in st.session_state and st.session_state.history:
     st.markdown("---")
     st.markdown("### 🖼️ History")
-    history_items = st.session_state.history[::-1]  # newest first
+    history_items = st.session_state.history[::-1]
     cols = st.columns(3)
     for idx, item in enumerate(history_items):
         with cols[idx % 3]:
             with st.container():
-                # Display the image
                 st.image(item["image"], use_column_width=True)
                 st.caption(item["prompt"][:80] + ("..." if len(item["prompt"]) > 80 else ""))
-                # Buttons row
                 col_a, col_b = st.columns(2)
                 with col_a:
                     if st.button("♻️ Reuse", key=f"reuse_{idx}"):
@@ -214,7 +261,6 @@ if "history" in st.session_state and st.session_state.history:
                         st.rerun()
                 with col_b:
                     if st.button("❌ Delete", key=f"del_{idx}"):
-                        # Remove this item from history
                         st.session_state.history.remove(item)
                         st.rerun()
 else:
