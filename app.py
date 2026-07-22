@@ -91,16 +91,17 @@ prompt = st.text_area("Enter your design prompt", height=100,
                       key="prompt_input")
 
 # ====== TEXT OVERLAY SETTINGS ======
-st.markdown("### ✏️ Text Overlay (optional)")
+st.markdown("### ✏️ Text Overlay (professional styling)")
 col1, col2 = st.columns(2)
 with col1:
     overlay_title = st.text_input("Title text", placeholder="e.g. Be Like Brit Summer 2026")
     overlay_subtitle = st.text_input("Subtitle text", placeholder="e.g. Design Class by Venite")
 with col2:
-    title_font_size = st.slider("Title font size", 20, 200, 80, step=5)
-    subtitle_font_size = st.slider("Subtitle font size", 20, 150, 50, step=5)
+    title_font_size = st.slider("Title font size", 20, 200, 90, step=5)
+    subtitle_font_size = st.slider("Subtitle font size", 20, 150, 55, step=5)
     text_color = st.color_picker("Text color", "#FFFFFF")
     text_position = st.selectbox("Position", ["Top", "Center", "Bottom"])
+    use_banner = st.checkbox("Add semi-transparent background banner", value=True)
 
 col_gen, col_clear = st.columns([4, 1])
 with col_gen:
@@ -144,10 +145,13 @@ def generate_image(prompt, width, height, style):
         st.error(f"Connection error: {e}")
         return None
 
-def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position):
-    """Overlay text on the image with chosen position."""
+def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position, use_banner=True):
+    """Overlay text with professional styling – banner, shadow, and underline."""
     img = img.copy()
+    w, h = img.size
     draw = ImageDraw.Draw(img)
+    
+    # Load fonts (try Arial, fallback to default)
     try:
         title_font = ImageFont.truetype("arial.ttf", title_size)
         subtitle_font = ImageFont.truetype("arial.ttf", subtitle_size)
@@ -155,31 +159,65 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
         title_font = ImageFont.load_default()
         subtitle_font = ImageFont.load_default()
     
-    w, h = img.size
-    # Determine vertical start
+    # Determine vertical starting point
     if position == "Top":
-        y = int(h * 0.10)
+        y_start = int(h * 0.10)
     elif position == "Bottom":
-        y = int(h * 0.75)
+        y_start = int(h * 0.70)
     else:  # Center
-        y = int(h * 0.40)
+        y_start = int(h * 0.35)
     
-    # Draw title
+    # Create a temporary image to measure total text block size
+    temp = Image.new('RGB', (1,1))
+    temp_draw = ImageDraw.Draw(temp)
+    
+    # Measure title and subtitle
+    title_bbox = temp_draw.textbbox((0,0), title, font=title_font) if title else (0,0,0,0)
+    subtitle_bbox = temp_draw.textbbox((0,0), subtitle, font=subtitle_font) if subtitle else (0,0,0,0)
+    title_w = title_bbox[2] - title_bbox[0] if title else 0
+    title_h = title_bbox[3] - title_bbox[1] if title else 0
+    sub_w = subtitle_bbox[2] - subtitle_bbox[0] if subtitle else 0
+    sub_h = subtitle_bbox[3] - subtitle_bbox[1] if subtitle else 0
+    
+    max_width = max(title_w, sub_w)
+    total_height = (title_h + 15 if title else 0) + (sub_h + 10 if subtitle else 0)
+    
+    if max_width == 0 or total_height == 0:
+        return img  # no text to draw
+    
+    # Add banner (semi-transparent background)
+    if use_banner:
+        banner_padding = 40
+        banner_x1 = (w - max_width) // 2 - banner_padding
+        banner_y1 = y_start - banner_padding
+        banner_x2 = (w + max_width) // 2 + banner_padding
+        banner_y2 = y_start + total_height + banner_padding
+        # Draw a rounded rectangle with semi-transparent dark color
+        # For simplicity, we'll draw a rectangle with transparency
+        overlay = Image.new('RGBA', img.size, (0,0,0,0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        # Use a semi-transparent black or a color that complements the image
+        overlay_draw.rectangle([banner_x1, banner_y1, banner_x2, banner_y2], fill=(0,0,0,130), outline=(255,255,255,50), width=3)
+        # Composite
+        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+        # Redraw draw object on new image
+        draw = ImageDraw.Draw(img)
+    
+    # Draw title with shadow
+    y = y_start
     if title:
-        # Measure text
-        bbox = draw.textbbox((0,0), title, font=title_font)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        x = (w - tw) // 2
-        draw.text((x, y), title, font=title_font, fill=color, stroke_width=2, stroke_fill="black")
-        y += th + 10
-    # Draw subtitle
+        # Shadow (offset, dark color)
+        draw.text((w//2 - title_w//2 + 3, y+3), title, font=title_font, fill=(0,0,0,200))
+        draw.text((w//2 - title_w//2, y), title, font=title_font, fill=color)
+        y += title_h + 15
+    
+    # Draw subtitle with shadow
     if subtitle:
-        bbox = draw.textbbox((0,0), subtitle, font=subtitle_font)
-        sw = bbox[2] - bbox[0]
-        sh = bbox[3] - bbox[1]
-        x = (w - sw) // 2
-        draw.text((x, y), subtitle, font=subtitle_font, fill=color, stroke_width=2, stroke_fill="black")
+        draw.text((w//2 - sub_w//2 + 2, y+2), subtitle, font=subtitle_font, fill=(0,0,0,200))
+        draw.text((w//2 - sub_w//2, y), subtitle, font=subtitle_font, fill=color)
+        # Add a decorative underline
+        underline_y = y + sub_h + 5
+        draw.line([(w//2 - sub_w//2, underline_y), (w//2 + sub_w//2, underline_y)], fill=color, width=3)
     
     return img
 
@@ -197,7 +235,7 @@ if generate and prompt:
         if img:
             # Apply text overlay if any text is provided
             if overlay_title or overlay_subtitle:
-                img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
+                img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position, use_banner)
             
             st.markdown("### ✨ Generated Design")
             col_display, col_info = st.columns([2, 1])
