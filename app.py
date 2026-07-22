@@ -91,15 +91,15 @@ prompt = st.text_area("Enter your design prompt", height=100,
                       value=st.session_state.get("prompt", ""),
                       key="prompt_input")
 
-# ====== TEXT OVERLAY – BIG, PROFESSIONAL, COLORFUL ======
-st.markdown("### ✏️ Big Text Overlay (professional & colourful)")
+# ====== TEXT OVERLAY – SLIDERS FROM 1 TO 600 ======
+st.markdown("### ✏️ Text Overlay (professional & colourful)")
 col1, col2 = st.columns(2)
 with col1:
     overlay_title = st.text_input("Title text", placeholder="e.g. Be Like Brit Summer 2026")
     overlay_subtitle = st.text_input("Subtitle text", placeholder="e.g. Design Class by Venite")
 with col2:
-    title_font_size = st.slider("Title font size", 40, 1000, 400, step=5)   # now up to 1000
-    subtitle_font_size = st.slider("Subtitle font size", 20, 800, 200, step=5)  # up to 800
+    title_font_size = st.slider("Title font size", 1, 600, 200, step=1)   # now from 1 to 600
+    subtitle_font_size = st.slider("Subtitle font size", 1, 600, 100, step=1)  # from 1 to 600
     text_color = st.color_picker("Text color", "#FFD700")
     text_position = st.selectbox("Position", ["Top", "Center", "Bottom"])
 
@@ -112,10 +112,9 @@ with col_clear:
         st.session_state.prompt = ""
         st.rerun()
 
-# ====== FONT LOADER – finds ANY .ttf file in the folder ======
+# ====== FONT LOADER – AUTO‑DETECTS ANY .ttf FILE ======
 def get_font(size, bold=True):
-    """Auto‑detect any .ttf file in the current folder; fallback to system fonts."""
-    # Look for any .ttf file in the current directory
+    # Look for any .ttf file in the current folder
     ttf_files = [f for f in os.listdir('.') if f.lower().endswith('.ttf')]
     if ttf_files:
         try:
@@ -136,7 +135,7 @@ def get_font(size, bold=True):
     st.warning("No scalable font found. Using fallback – text may be small. Upload a TrueType font (.ttf) file to the app folder for best results.")
     return ImageFont.load_default()
 
-# ====== GENERATION LOGIC ======
+# ====== GENERATION FUNCTIONS ======
 def enhance_prompt(prompt):
     quality_keywords = "high quality, professional, detailed, 8k, sharp focus, vibrant colors"
     if not any(kw in prompt.lower() for kw in ["high quality", "professional", "detailed", "8k"]):
@@ -195,14 +194,17 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
     
     y = y_start
     if title:
+        # Glow
         for offset in range(10, 0, -2):
             alpha = int(30 * (offset/10))
             glow_color = (255,255,255, alpha)
             draw.text((w//2 - title_w//2 + offset//2, y+offset//2), title, font=title_font, fill=glow_color)
+        # Thick outline
         for dx in range(-4, 5, 2):
             for dy in range(-4, 5, 2):
                 if dx != 0 or dy != 0:
                     draw.text((w//2 - title_w//2 + dx, y+dy), title, font=title_font, fill='black')
+        # Main text
         draw.text((w//2 - title_w//2, y), title, font=title_font, fill=color)
         y += title_h + 25
     
@@ -229,6 +231,7 @@ def add_background(img, bg_color, output_size=(1200, 1200)):
     canvas.paste(img, (x, y))
     return canvas
 
+# ====== GENERATE ======
 if generate and prompt:
     with st.spinner("🎨 Creating your design..."):
         img = generate_image(prompt, width, height, style)
@@ -266,6 +269,7 @@ if generate and prompt:
                     mime="image/png",
                     use_container_width=True
                 )
+            # Save to history
             if "history" not in st.session_state:
                 st.session_state.history = []
             st.session_state.history.append({
