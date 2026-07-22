@@ -98,8 +98,8 @@ with col1:
     overlay_title = st.text_input("Title text", placeholder="e.g. Be Like Brit Summer 2026")
     overlay_subtitle = st.text_input("Subtitle text", placeholder="e.g. Design Class by Venite")
 with col2:
-    title_font_size = st.slider("Title font size", 40, 800, 400, step=5)   # now up to 800
-    subtitle_font_size = st.slider("Subtitle font size", 20, 600, 200, step=5)  # up to 600
+    title_font_size = st.slider("Title font size", 40, 1000, 400, step=5)   # now up to 1000
+    subtitle_font_size = st.slider("Subtitle font size", 20, 800, 200, step=5)  # up to 800
     text_color = st.color_picker("Text color", "#FFD700")
     text_position = st.selectbox("Position", ["Top", "Center", "Bottom"])
 
@@ -112,42 +112,28 @@ with col_clear:
         st.session_state.prompt = ""
         st.rerun()
 
-# ====== FONT LOADER – tries local font, then system fonts ======
+# ====== FONT LOADER – finds ANY .ttf file in the folder ======
 def get_font(size, bold=True):
-    """Try to load a scalable font, with fallback."""
-    font_names = []
-    if bold:
-        font_names = [
-            "font.ttf",  # user-provided font in the same folder
-            "OpenSans-Bold.ttf",
-            "DejaVuSans-Bold.ttf",
-            "Arial Bold.ttf",
-            "arialbd.ttf",
-            "arial.ttf",
-        ]
-    else:
-        font_names = [
-            "font.ttf",
-            "OpenSans-Regular.ttf",
-            "DejaVuSans.ttf",
-            "Arial.ttf",
-            "arial.ttf",
-        ]
+    """Auto‑detect any .ttf file in the current folder; fallback to system fonts."""
+    # Look for any .ttf file in the current directory
+    ttf_files = [f for f in os.listdir('.') if f.lower().endswith('.ttf')]
+    if ttf_files:
+        try:
+            return ImageFont.truetype(ttf_files[0], size)
+        except:
+            pass
+    # Try common system fonts
+    font_names = [
+        "OpenSans-Bold.ttf", "OpenSans-Regular.ttf",
+        "DejaVuSans-Bold.ttf", "DejaVuSans.ttf",
+        "Arial Bold.ttf", "Arial.ttf", "arialbd.ttf", "arial.ttf"
+    ]
     for name in font_names:
         try:
-            # Check if file exists in current directory
-            if os.path.exists(name):
-                return ImageFont.truetype(name, size)
+            return ImageFont.truetype(name, size)
         except:
             pass
-        try:
-            # Check system fonts (Linux)
-            if os.path.exists(f"/usr/share/fonts/truetype/dejavu/{name}"):
-                return ImageFont.truetype(f"/usr/share/fonts/truetype/dejavu/{name}", size)
-        except:
-            pass
-    # Fallback: scale the default bitmap font (not ideal, but better than nothing)
-    st.warning("No scalable font found. Using fallback – text may be small. Place a TrueType font (e.g., OpenSans-Bold.ttf) as 'font.ttf' in the app folder for best results.")
+    st.warning("No scalable font found. Using fallback – text may be small. Upload a TrueType font (.ttf) file to the app folder for best results.")
     return ImageFont.load_default()
 
 # ====== GENERATION LOGIC ======
@@ -184,24 +170,20 @@ def generate_image(prompt, width, height, style):
         return None
 
 def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position):
-    """Overlay big, bold, colourful text with glow effect."""
     img = img.copy()
     w, h = img.size
     draw = ImageDraw.Draw(img)
     
-    # Load scalable fonts
     title_font = get_font(title_size, bold=True)
     subtitle_font = get_font(subtitle_size, bold=True)
     
-    # Determine vertical start
     if position == "Top":
         y_start = int(h * 0.08)
     elif position == "Bottom":
         y_start = int(h * 0.70)
-    else:  # Center
+    else:
         y_start = int(h * 0.28)
     
-    # Measure text block
     temp = Image.new('RGB', (1,1))
     temp_draw = ImageDraw.Draw(temp)
     title_bbox = temp_draw.textbbox((0,0), title, font=title_font) if title else (0,0,0,0)
@@ -211,24 +193,19 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
     sub_w = subtitle_bbox[2] - subtitle_bbox[0] if subtitle else 0
     sub_h = subtitle_bbox[3] - subtitle_bbox[1] if subtitle else 0
     
-    # Draw title with glow and outline
     y = y_start
     if title:
-        # Glow effect
         for offset in range(10, 0, -2):
             alpha = int(30 * (offset/10))
             glow_color = (255,255,255, alpha)
             draw.text((w//2 - title_w//2 + offset//2, y+offset//2), title, font=title_font, fill=glow_color)
-        # Thick outline
         for dx in range(-4, 5, 2):
             for dy in range(-4, 5, 2):
                 if dx != 0 or dy != 0:
                     draw.text((w//2 - title_w//2 + dx, y+dy), title, font=title_font, fill='black')
-        # Main text
         draw.text((w//2 - title_w//2, y), title, font=title_font, fill=color)
         y += title_h + 25
     
-    # Draw subtitle
     if subtitle:
         for offset in range(6, 0, -2):
             alpha = int(20 * (offset/6))
@@ -239,7 +216,6 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
                 if dx != 0 or dy != 0:
                     draw.text((w//2 - sub_w//2 + dx, y+dy), subtitle, font=subtitle_font, fill='black')
         draw.text((w//2 - sub_w//2, y), subtitle, font=subtitle_font, fill=color)
-        # Decorative underline
         underline_y = y + sub_h + 5
         draw.line([(w//2 - sub_w//2 - 20, underline_y), (w//2 + sub_w//2 + 20, underline_y)], fill=color, width=3)
     
@@ -257,7 +233,6 @@ if generate and prompt:
     with st.spinner("🎨 Creating your design..."):
         img = generate_image(prompt, width, height, style)
         if img:
-            # Apply text overlay if any text is provided
             if overlay_title or overlay_subtitle:
                 img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
             
@@ -291,7 +266,6 @@ if generate and prompt:
                     mime="image/png",
                     use_container_width=True
                 )
-            # Save to history
             if "history" not in st.session_state:
                 st.session_state.history = []
             st.session_state.history.append({
@@ -305,7 +279,7 @@ if generate and prompt:
             if len(st.session_state.history) > 20:
                 st.session_state.history = st.session_state.history[-20:]
 
-# ====== HISTORY GALLERY ======
+# ====== HISTORY ======
 if "history" in st.session_state and st.session_state.history:
     st.markdown("---")
     st.markdown("### 🖼️ History")
