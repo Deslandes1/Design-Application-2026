@@ -5,6 +5,7 @@ import io
 import random
 import time
 import urllib.parse
+import os
 
 # ====== PAGE CONFIG ======
 st.set_page_config(page_title="Be Like Brit Design", page_icon="🎨", layout="wide")
@@ -42,7 +43,7 @@ with st.sidebar:
     st.markdown("## ☀️ Summer 2026 Design Class")
     st.markdown("---")
     st.header("⚙️ Settings")
-    width = st.selectbox("Width", [512, 768, 1024, 1280, 1920], index=3)  # added 1920
+    width = st.selectbox("Width", [512, 768, 1024, 1280, 1920], index=3)
     height = st.selectbox("Height", [512, 768, 1024, 1280, 1920], index=3)
     style = st.selectbox("Style", ["No style", "Cinematic", "Anime", "Realistic", "Cyberpunk", "Watercolor", "3D Render"])
     st.markdown("---")
@@ -97,9 +98,9 @@ with col1:
     overlay_title = st.text_input("Title text", placeholder="e.g. Be Like Brit Summer 2026")
     overlay_subtitle = st.text_input("Subtitle text", placeholder="e.g. Design Class by Venite")
 with col2:
-    title_font_size = st.slider("Title font size", 40, 600, 300, step=5)   # now up to 600
-    subtitle_font_size = st.slider("Subtitle font size", 20, 400, 180, step=5)  # up to 400
-    text_color = st.color_picker("Text color", "#FFD700")  # Gold default
+    title_font_size = st.slider("Title font size", 40, 800, 400, step=5)   # now up to 800
+    subtitle_font_size = st.slider("Subtitle font size", 20, 600, 200, step=5)  # up to 600
+    text_color = st.color_picker("Text color", "#FFD700")
     text_position = st.selectbox("Position", ["Top", "Center", "Bottom"])
 
 col_gen, col_clear = st.columns([4, 1])
@@ -110,6 +111,44 @@ with col_clear:
     if clear:
         st.session_state.prompt = ""
         st.rerun()
+
+# ====== FONT LOADER – tries local font, then system fonts ======
+def get_font(size, bold=True):
+    """Try to load a scalable font, with fallback."""
+    font_names = []
+    if bold:
+        font_names = [
+            "font.ttf",  # user-provided font in the same folder
+            "OpenSans-Bold.ttf",
+            "DejaVuSans-Bold.ttf",
+            "Arial Bold.ttf",
+            "arialbd.ttf",
+            "arial.ttf",
+        ]
+    else:
+        font_names = [
+            "font.ttf",
+            "OpenSans-Regular.ttf",
+            "DejaVuSans.ttf",
+            "Arial.ttf",
+            "arial.ttf",
+        ]
+    for name in font_names:
+        try:
+            # Check if file exists in current directory
+            if os.path.exists(name):
+                return ImageFont.truetype(name, size)
+        except:
+            pass
+        try:
+            # Check system fonts (Linux)
+            if os.path.exists(f"/usr/share/fonts/truetype/dejavu/{name}"):
+                return ImageFont.truetype(f"/usr/share/fonts/truetype/dejavu/{name}", size)
+        except:
+            pass
+    # Fallback: scale the default bitmap font (not ideal, but better than nothing)
+    st.warning("No scalable font found. Using fallback – text may be small. Place a TrueType font (e.g., OpenSans-Bold.ttf) as 'font.ttf' in the app folder for best results.")
+    return ImageFont.load_default()
 
 # ====== GENERATION LOGIC ======
 def enhance_prompt(prompt):
@@ -150,21 +189,9 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
     w, h = img.size
     draw = ImageDraw.Draw(img)
     
-    # Load fonts (Arial Bold if available)
-    try:
-        title_font = ImageFont.truetype("arialbd.ttf", title_size)
-    except:
-        try:
-            title_font = ImageFont.truetype("arial.ttf", title_size)
-        except:
-            title_font = ImageFont.load_default()
-    try:
-        subtitle_font = ImageFont.truetype("arialbd.ttf", subtitle_size)
-    except:
-        try:
-            subtitle_font = ImageFont.truetype("arial.ttf", subtitle_size)
-        except:
-            subtitle_font = ImageFont.load_default()
+    # Load scalable fonts
+    title_font = get_font(title_size, bold=True)
+    subtitle_font = get_font(subtitle_size, bold=True)
     
     # Determine vertical start
     if position == "Top":
@@ -187,7 +214,7 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
     # Draw title with glow and outline
     y = y_start
     if title:
-        # Glow effect: multiple semi-transparent layers
+        # Glow effect
         for offset in range(10, 0, -2):
             alpha = int(30 * (offset/10))
             glow_color = (255,255,255, alpha)
@@ -201,7 +228,7 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
         draw.text((w//2 - title_w//2, y), title, font=title_font, fill=color)
         y += title_h + 25
     
-    # Draw subtitle with glow and outline
+    # Draw subtitle
     if subtitle:
         for offset in range(6, 0, -2):
             alpha = int(20 * (offset/6))
