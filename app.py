@@ -1,52 +1,58 @@
 import streamlit as st
 import requests
-from PIL import Image
+from PIL import Image, ImageDraw
 import io
 import base64
 import random
 import time
+import urllib.parse
 
 # ====== PAGE CONFIG ======
-st.set_page_config(page_title="AI Design Generator", page_icon="🎨", layout="wide")
+st.set_page_config(page_title="Be Like Brit Design", page_icon="🎨", layout="wide")
 
-# ====== CUSTOM CSS – DARK PROFESSIONAL THEME ======
+# ====== CUSTOM CSS – LIGHT BLUE THEME ======
 st.markdown("""
 <style>
-    /* Main container */
+    /* Main container – light blue background */
     .stApp {
-        background: #0e1117;
-        color: #f0f2f6;
+        background: #E3F2FD;
+        color: #1a2a3a;
     }
     .stApp [data-testid="stAppViewContainer"] {
         background: transparent;
     }
+    /* Sidebar – light blue */
+    [data-testid="stSidebar"] {
+        background: #B3E5FC !important;
+        border-right: 1px solid #90CAF9;
+    }
+    [data-testid="stSidebar"] * {
+        color: #0a2a44 !important;
+    }
+    .stSidebar .stButton > button {
+        background: #64B5F6 !important;
+        color: white !important;
+    }
     /* Headers */
     h1, h2, h3 {
-        color: #ffffff !important;
+        color: #0a2a44 !important;
     }
-    /* Inputs */
-    .stTextInput > div > div > input {
-        background: #1e2128 !important;
-        color: #ffffff !important;
-        border: 1px solid #3a3f4a !important;
-        border-radius: 8px !important;
-    }
-    .stTextArea > div > textarea {
-        background: #1e2128 !important;
-        color: #ffffff !important;
-        border: 1px solid #3a3f4a !important;
-        border-radius: 8px !important;
-    }
+    /* Inputs – light blue background */
+    .stTextInput > div > div > input,
+    .stTextArea > div > textarea,
     .stSelectbox > div > div {
-        background: #1e2128 !important;
-        color: #ffffff !important;
+        background: #FFFFFF !important;
+        color: #1a2a3a !important;
+        border: 1px solid #90CAF9 !important;
+        border-radius: 8px !important;
     }
+    /* Slider */
     .stSlider > div > div {
-        background: #3a3f4a !important;
+        background: #64B5F6 !important;
     }
-    /* Buttons */
+    /* Buttons – primary action */
     .stButton > button {
-        background: linear-gradient(105deg, #6c5ce7 0%, #a29bfe 100%);
+        background: linear-gradient(105deg, #1E88E5 0%, #42A5F5 100%);
         color: white;
         border: none;
         border-radius: 40px;
@@ -57,31 +63,32 @@ st.markdown("""
     }
     .stButton > button:hover {
         transform: scale(1.02);
-        box-shadow: 0 4px 20px rgba(108, 92, 231, 0.4);
+        box-shadow: 0 4px 20px rgba(30, 136, 229, 0.4);
     }
-    /* Image containers */
+    /* Generated image styling */
     .generated-image {
         border-radius: 12px;
-        box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.1);
         margin: 10px 0;
         width: 100%;
     }
+    /* History grid */
     .history-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
         gap: 15px;
         margin: 10px 0;
     }
     .history-item {
-        background: #1e2128;
+        background: white;
         border-radius: 8px;
         padding: 10px;
-        border: 1px solid #3a3f4a;
+        border: 1px solid #90CAF9;
         transition: 0.2s;
     }
     .history-item:hover {
         transform: scale(1.02);
-        border-color: #6c5ce7;
+        border-color: #1E88E5;
     }
     .history-item img {
         width: 100%;
@@ -89,28 +96,35 @@ st.markdown("""
     }
     .history-item .prompt-text {
         font-size: 0.8rem;
-        color: #aaa;
+        color: #1a2a3a;
         margin-top: 5px;
         word-break: break-word;
     }
+    /* Preset buttons */
     .preset-btn {
-        background: #2a2d36 !important;
-        color: #f0f2f6 !important;
-        border: 1px solid #3a3f4a !important;
+        background: #E1F5FE !important;
+        color: #0a2a44 !important;
+        border: 1px solid #81D4FA !important;
         border-radius: 20px !important;
         padding: 0.2rem 1rem !important;
         font-size: 0.8rem !important;
         margin: 2px !important;
     }
     .preset-btn:hover {
-        background: #3a3f4a !important;
+        background: #B3E5FC !important;
+    }
+    /* Download options label */
+    .download-label {
+        font-weight: 600;
+        color: #0a2a44;
+        margin-top: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ====== SIDEBAR ======
 with st.sidebar:
-    st.image("https://via.placeholder.com/150x50/6c5ce7/FFFFFF?text=Design+AI", use_column_width=True)
+    st.markdown("## ☀️ Summer 2026 Design Class")
     st.markdown("---")
     st.header("⚙️ Settings")
     width = st.selectbox("Width", [512, 768, 1024, 1280], index=2)
@@ -119,13 +133,22 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### ℹ️ About")
     st.caption("Powered by [Pollinations.ai](https://pollinations.ai) – free, no API key required.")
-    st.caption("Built by Gesner Deslandes | GlobalInternet.py")
+    st.caption("Gesner Deslandes, Technology Coordinator at Be Like Brit Summer Project 2026")
+    st.caption("📞 (509) 4738-5663")
+    st.caption("📧 deslandes78@gmail.com")
 
-# ====== MAIN ======
-st.title("🎨 AI Design Generator")
+# ====== MAIN PAGE TITLE ======
+st.markdown("""
+<div style="text-align: center; padding: 1rem 0 0.5rem 0;">
+    <h1 style="font-size: 3.5rem; font-weight: 800; background: linear-gradient(135deg, #0D47A1 0%, #42A5F5 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0;">Be Like Brit</h1>
+    <h2 style="font-size: 2.2rem; font-weight: 300; color: #0a2a44; margin-top: -0.5rem;">Design Application</h2>
+    <hr style="width: 200px; border: 2px solid #42A5F5; border-radius: 5px; margin: 0.5rem auto;">
+</div>
+""", unsafe_allow_html=True)
+
 st.markdown("Describe your dream design – I'll bring it to life.")
 
-# Preset prompts
+# ====== PRESET PROMPTS ======
 presets = [
     "Futuristic cityscape at sunset, neon lights, cyberpunk style",
     "Minimalist logo for a tech startup, geometric, blue and gold",
@@ -142,12 +165,11 @@ for i, preset in enumerate(presets[:3]):
             st.session_state.prompt = preset
             st.rerun()
 
-# Prompt input
+# ====== PROMPT INPUT ======
 prompt = st.text_area("Enter your design prompt", height=100,
                       value=st.session_state.get("prompt", ""),
                       key="prompt_input")
 
-# Generate button
 col_gen, col_clear = st.columns([4, 1])
 with col_gen:
     generate = st.button("🚀 Generate Design", use_container_width=True)
@@ -160,7 +182,6 @@ with col_clear:
 # ====== GENERATION LOGIC ======
 def generate_image(prompt, width, height, style):
     """Generate image using Pollinations.ai."""
-    # Apply style if selected
     style_map = {
         "Cinematic": "cinematic",
         "Anime": "anime",
@@ -172,8 +193,6 @@ def generate_image(prompt, width, height, style):
     style_param = style_map.get(style, "")
     if style_param:
         prompt = f"{prompt}, {style_param} style"
-    # URL encode prompt
-    import urllib.parse
     encoded = urllib.parse.quote(prompt)
     url = f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true&seed={random.randint(1,999999)}"
     try:
@@ -187,11 +206,19 @@ def generate_image(prompt, width, height, style):
         st.error(f"Connection error: {e}")
         return None
 
+def add_background(img, bg_color, output_size=(1200, 1200)):
+    """Place generated image on a colored background sheet."""
+    canvas = Image.new('RGB', output_size, bg_color)
+    img_w, img_h = img.size
+    x = (output_size[0] - img_w) // 2
+    y = (output_size[1] - img_h) // 2
+    canvas.paste(img, (x, y))
+    return canvas
+
 if generate and prompt:
     with st.spinner("🎨 Creating your design..."):
         img = generate_image(prompt, width, height, style)
         if img:
-            # Display
             st.markdown("### ✨ Generated Design")
             col_display, col_info = st.columns([2, 1])
             with col_display:
@@ -200,18 +227,28 @@ if generate and prompt:
                 st.markdown(f"**Prompt:** {prompt}")
                 st.markdown(f"**Size:** {width}×{height}")
                 st.markdown(f"**Style:** {style if style != 'No style' else 'None'}")
-                # Download
+                st.markdown("---")
+                st.markdown("### 💾 Download Options")
+                bg_option = st.selectbox("Choose background sheet color", ["White", "Black", "Custom"], index=0)
+                if bg_option == "Custom":
+                    custom_color = st.color_picker("Pick a color", "#FFFFFF")
+                    bg_color = custom_color
+                elif bg_option == "White":
+                    bg_color = "#FFFFFF"
+                else:
+                    bg_color = "#000000"
+                output_size = (max(width, height) + 200, max(width, height) + 200)
+                bg_img = add_background(img, bg_color, output_size)
                 buf = io.BytesIO()
-                img.save(buf, format="PNG")
+                bg_img.save(buf, format="PNG")
                 byte_im = buf.getvalue()
                 st.download_button(
-                    label="💾 Download PNG",
+                    label="⬇️ Download Design with Sheet",
                     data=byte_im,
                     file_name=f"design_{int(time.time())}.png",
                     mime="image/png",
                     use_container_width=True
                 )
-            # Save to history
             if "history" not in st.session_state:
                 st.session_state.history = []
             st.session_state.history.append({
@@ -219,7 +256,6 @@ if generate and prompt:
                 "image": img,
                 "timestamp": time.time()
             })
-            # Keep only last 20
             if len(st.session_state.history) > 20:
                 st.session_state.history = st.session_state.history[-20:]
 
@@ -227,8 +263,7 @@ if generate and prompt:
 if "history" in st.session_state and st.session_state.history:
     st.markdown("---")
     st.markdown("### 🖼️ History")
-    # Display last 5
-    history_items = st.session_state.history[-5:][::-1]  # newest first
+    history_items = st.session_state.history[-5:][::-1]
     cols = st.columns(3)
     for idx, item in enumerate(history_items):
         with cols[idx % 3]:
@@ -242,7 +277,7 @@ else:
     if not generate:
         st.info("👆 Enter a prompt and click **Generate Design** to create something beautiful.")
 
-# ====== FOOTER ======
+# ====== FOOTER – updated title ======
 st.markdown("---")
-st.caption("Built with ❤️ by Gesner Deslandes | GlobalInternet.py")
+st.caption("Gesner Deslandes, Technology Coordinator at Be Like Brit Summer Project 2026")
 st.caption("📞 (509) 4738-5663 | 📧 deslandes78@gmail.com")
