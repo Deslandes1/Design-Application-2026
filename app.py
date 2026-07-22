@@ -90,16 +90,16 @@ prompt = st.text_area("Enter your design prompt", height=100,
                       value=st.session_state.get("prompt", ""),
                       key="prompt_input")
 
-# ====== TEXT OVERLAY – BIG & FRAMELESS ======
-st.markdown("### ✏️ Big Text Overlay (no frame)")
+# ====== TEXT OVERLAY – BIG, PROFESSIONAL, COLORFUL ======
+st.markdown("### ✏️ Big Text Overlay (professional & colourful)")
 col1, col2 = st.columns(2)
 with col1:
     overlay_title = st.text_input("Title text", placeholder="e.g. Be Like Brit Summer 2026")
     overlay_subtitle = st.text_input("Subtitle text", placeholder="e.g. Design Class by Venite")
 with col2:
-    title_font_size = st.slider("Title font size", 30, 250, 120, step=5)
-    subtitle_font_size = st.slider("Subtitle font size", 20, 180, 70, step=5)
-    text_color = st.color_picker("Text color", "#FFFFFF")
+    title_font_size = st.slider("Title font size", 40, 300, 160, step=5)   # Default 160
+    subtitle_font_size = st.slider("Subtitle font size", 20, 200, 90, step=5)  # Default 90
+    text_color = st.color_picker("Text color", "#FFD700")  # Gold default
     text_position = st.selectbox("Position", ["Top", "Center", "Bottom"])
 
 col_gen, col_clear = st.columns([4, 1])
@@ -145,7 +145,7 @@ def generate_image(prompt, width, height, style):
         return None
 
 def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position):
-    """Overlay big, bold text without a frame – uses thick outline and shadow."""
+    """Overlay big, bold, colourful text with glow effect."""
     img = img.copy()
     w, h = img.size
     draw = ImageDraw.Draw(img)
@@ -172,7 +172,7 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
     elif position == "Bottom":
         y_start = int(h * 0.70)
     else:  # Center
-        y_start = int(h * 0.30)
+        y_start = int(h * 0.28)
     
     # Measure text block
     temp = Image.new('RGB', (1,1))
@@ -184,31 +184,37 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
     sub_w = subtitle_bbox[2] - subtitle_bbox[0] if subtitle else 0
     sub_h = subtitle_bbox[3] - subtitle_bbox[1] if subtitle else 0
     
-    # Draw title with thick outline and shadow
+    # Draw title with glow and outline
     y = y_start
     if title:
-        # Shadow (offset)
-        draw.text((w//2 - title_w//2 + 4, y+4), title, font=title_font, fill=(0,0,0,180))
-        # Thick outline (draw multiple times with small offsets)
-        for dx in range(-3, 4, 2):
-            for dy in range(-3, 4, 2):
+        # Glow effect: multiple semi-transparent layers
+        for offset in range(10, 0, -2):
+            alpha = int(30 * (offset/10))
+            glow_color = (255,255,255, alpha)  # white glow
+            draw.text((w//2 - title_w//2 + offset//2, y+offset//2), title, font=title_font, fill=glow_color)
+        # Thick outline
+        for dx in range(-4, 5, 2):
+            for dy in range(-4, 5, 2):
                 if dx != 0 or dy != 0:
                     draw.text((w//2 - title_w//2 + dx, y+dy), title, font=title_font, fill='black')
         # Main text
         draw.text((w//2 - title_w//2, y), title, font=title_font, fill=color)
-        y += title_h + 20
+        y += title_h + 25
     
-    # Draw subtitle with outline and shadow
+    # Draw subtitle with glow and outline
     if subtitle:
-        draw.text((w//2 - sub_w//2 + 3, y+3), subtitle, font=subtitle_font, fill=(0,0,0,180))
-        for dx in range(-2, 3, 2):
-            for dy in range(-2, 3, 2):
+        for offset in range(6, 0, -2):
+            alpha = int(20 * (offset/6))
+            glow_color = (255,255,255, alpha)
+            draw.text((w//2 - sub_w//2 + offset//2, y+offset//2), subtitle, font=subtitle_font, fill=glow_color)
+        for dx in range(-3, 4, 2):
+            for dy in range(-3, 4, 2):
                 if dx != 0 or dy != 0:
                     draw.text((w//2 - sub_w//2 + dx, y+dy), subtitle, font=subtitle_font, fill='black')
         draw.text((w//2 - sub_w//2, y), subtitle, font=subtitle_font, fill=color)
-        # Optional underline (thin, elegant)
+        # Decorative underline
         underline_y = y + sub_h + 5
-        draw.line([(w//2 - sub_w//2 - 10, underline_y), (w//2 + sub_w//2 + 10, underline_y)], fill=color, width=2)
+        draw.line([(w//2 - sub_w//2 - 20, underline_y), (w//2 + sub_w//2 + 20, underline_y)], fill=color, width=3)
     
     return img
 
