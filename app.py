@@ -42,8 +42,8 @@ with st.sidebar:
     st.markdown("## ☀️ Summer 2026 Design Class")
     st.markdown("---")
     st.header("⚙️ Settings")
-    width = st.selectbox("Width", [512, 768, 1024, 1280], index=2)
-    height = st.selectbox("Height", [512, 768, 1024, 1280], index=2)
+    width = st.selectbox("Width", [512, 768, 1024, 1280, 1920], index=3)  # added 1920
+    height = st.selectbox("Height", [512, 768, 1024, 1280, 1920], index=3)
     style = st.selectbox("Style", ["No style", "Cinematic", "Anime", "Realistic", "Cyberpunk", "Watercolor", "3D Render"])
     st.markdown("---")
     st.markdown("### ℹ️ About")
@@ -97,8 +97,8 @@ with col1:
     overlay_title = st.text_input("Title text", placeholder="e.g. Be Like Brit Summer 2026")
     overlay_subtitle = st.text_input("Subtitle text", placeholder="e.g. Design Class by Venite")
 with col2:
-    title_font_size = st.slider("Title font size", 40, 300, 160, step=5)   # Default 160
-    subtitle_font_size = st.slider("Subtitle font size", 20, 200, 90, step=5)  # Default 90
+    title_font_size = st.slider("Title font size", 40, 600, 300, step=5)   # now up to 600
+    subtitle_font_size = st.slider("Subtitle font size", 20, 400, 180, step=5)  # up to 400
     text_color = st.color_picker("Text color", "#FFD700")  # Gold default
     text_position = st.selectbox("Position", ["Top", "Center", "Bottom"])
 
@@ -190,7 +190,7 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
         # Glow effect: multiple semi-transparent layers
         for offset in range(10, 0, -2):
             alpha = int(30 * (offset/10))
-            glow_color = (255,255,255, alpha)  # white glow
+            glow_color = (255,255,255, alpha)
             draw.text((w//2 - title_w//2 + offset//2, y+offset//2), title, font=title_font, fill=glow_color)
         # Thick outline
         for dx in range(-4, 5, 2):
