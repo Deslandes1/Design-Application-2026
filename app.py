@@ -114,14 +114,12 @@ with col_clear:
 
 # ====== FONT LOADER – AUTO‑DETECTS ANY .ttf FILE ======
 def get_font(size, bold=True):
-    # Look for any .ttf file in the current folder
     ttf_files = [f for f in os.listdir('.') if f.lower().endswith('.ttf')]
     if ttf_files:
         try:
             return ImageFont.truetype(ttf_files[0], size)
         except:
             pass
-    # Try common system fonts
     font_names = [
         "OpenSans-Bold.ttf", "OpenSans-Regular.ttf",
         "DejaVuSans-Bold.ttf", "DejaVuSans.ttf",
@@ -156,16 +154,29 @@ def generate_image(prompt, width, height, style):
     if style_param:
         enhanced_prompt = f"{enhanced_prompt}, {style_param} style"
     encoded = urllib.parse.quote(enhanced_prompt)
+    
+    # Try primary URL (image.pollinations.ai)
     url = f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true&seed={random.randint(1,999999)}"
     try:
         response = requests.get(url, timeout=30)
         if response.status_code == 200:
             return Image.open(io.BytesIO(response.content))
         else:
-            st.error(f"Error: {response.status_code}")
+            st.warning(f"Primary URL returned {response.status_code}. Trying fallback...")
+    except Exception as e:
+        st.warning(f"Primary URL error: {e}. Trying fallback...")
+    
+    # Fallback URL (pollinations.ai without 'image.')
+    fallback_url = f"https://pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true&seed={random.randint(1,999999)}"
+    try:
+        response = requests.get(fallback_url, timeout=30)
+        if response.status_code == 200:
+            return Image.open(io.BytesIO(response.content))
+        else:
+            st.error(f"Fallback URL also failed with status {response.status_code}.")
             return None
     except Exception as e:
-        st.error(f"Connection error: {e}")
+        st.error(f"Fallback error: {e}")
         return None
 
 def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position):
@@ -216,7 +227,6 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
                 if dx != 0 or dy != 0:
                     draw.text((w//2 - sub_w//2 + dx, y+dy), subtitle, font=subtitle_font, fill='black')
         draw.text((w//2 - sub_w//2, y), subtitle, font=subtitle_font, fill=color)
-        # NO underline
     return img
 
 def add_background(img, bg_color, output_size=(1200, 1200)):
