@@ -6,7 +6,6 @@ import random
 import time
 import urllib.parse
 import os
-import base64
 
 # ====== PAGE CONFIG ======
 st.set_page_config(page_title="Be Like Brit Design", page_icon="🎨", layout="wide")
@@ -141,47 +140,26 @@ def enhance_prompt(prompt):
         prompt = f"{prompt}, {quality_keywords}"
     return prompt
 
-def create_placeholder_image(width, height, prompt):
-    """Generate a beautiful gradient placeholder with the prompt text."""
+def create_placeholder_image(width, height):
+    """Generate a clean dark gradient background – no text – so the overlay stands out."""
     img = Image.new('RGB', (width, height))
     draw = ImageDraw.Draw(img)
-    # Gradient from dark blue to purple
+    # Gradient from dark blue to deep purple
     for y in range(height):
         ratio = y / height
-        r = int(20 + 50 * ratio)
-        g = int(40 + 30 * ratio)
-        b = int(80 + 100 * ratio)
+        r = int(10 + 40 * ratio)
+        g = int(20 + 20 * ratio)
+        b = int(40 + 80 * ratio)
         draw.line([(0, y), (width, y)], fill=(r, g, b))
-    # Draw prompt text
-    try:
-        font = ImageFont.truetype("arial.ttf", 40)
-    except:
-        font = ImageFont.load_default()
-    # Wrap text
-    max_width = width - 100
-    words = prompt.split()
-    lines = []
-    if words:
-        line = ""
-        for word in words:
-            test_line = line + word + " "
-            bbox = draw.textbbox((0,0), test_line, font=font)
-            w = bbox[2] - bbox[0]
-            if w <= max_width:
-                line = test_line
-            else:
-                if line:
-                    lines.append(line.strip())
-                line = word + " "
-        if line:
-            lines.append(line.strip())
-    y_text = 100
-    for line in lines:
-        bbox = draw.textbbox((0,0), line, font=font)
-        w = bbox[2] - bbox[0]
-        x = (width - w) // 2
-        draw.text((x, y_text), line, font=font, fill='white')
-        y_text += 50
+    # Add a subtle glow in the centre
+    center = (width//2, height//2)
+    for radius in range(min(width, height)//2, 0, -5):
+        alpha = int(10 * (1 - radius / (min(width, height)//2)))
+        overlay = Image.new('RGBA', (width, height), (0,0,0,0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        overlay_draw.ellipse((center[0]-radius, center[1]-radius, center[0]+radius, center[1]+radius), 
+                             fill=(255,255,255,alpha))
+        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
     return img
 
 def generate_image(prompt, width, height, style):
@@ -206,12 +184,12 @@ def generate_image(prompt, width, height, style):
         if response.status_code == 200:
             return Image.open(io.BytesIO(response.content))
         else:
-            st.warning(f"API error ({response.status_code}). Using placeholder image.")
+            st.warning(f"API error ({response.status_code}). Using placeholder gradient.")
     except Exception as e:
-        st.warning(f"Connection error: {e}. Using placeholder image.")
+        st.warning(f"Connection error: {e}. Using placeholder gradient.")
     
-    # Fallback – create a placeholder with the prompt
-    return create_placeholder_image(width, height, enhanced_prompt)
+    # Fallback – clean gradient (no text)
+    return create_placeholder_image(width, height)
 
 def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position):
     img = img.copy()
