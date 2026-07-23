@@ -6,6 +6,7 @@ import random
 import time
 import urllib.parse
 import os
+import base64
 
 # ====== PAGE CONFIG ======
 st.set_page_config(page_title="Be Like Brit Design", page_icon="🎨", layout="wide")
@@ -140,6 +141,49 @@ def enhance_prompt(prompt):
         prompt = f"{prompt}, {quality_keywords}"
     return prompt
 
+def create_placeholder_image(width, height, prompt):
+    """Generate a beautiful gradient placeholder with the prompt text."""
+    img = Image.new('RGB', (width, height))
+    draw = ImageDraw.Draw(img)
+    # Gradient from dark blue to purple
+    for y in range(height):
+        ratio = y / height
+        r = int(20 + 50 * ratio)
+        g = int(40 + 30 * ratio)
+        b = int(80 + 100 * ratio)
+        draw.line([(0, y), (width, y)], fill=(r, g, b))
+    # Draw prompt text
+    try:
+        font = ImageFont.truetype("arial.ttf", 40)
+    except:
+        font = ImageFont.load_default()
+    # Wrap text
+    max_width = width - 100
+    words = prompt.split()
+    lines = []
+    if words:
+        line = ""
+        for word in words:
+            test_line = line + word + " "
+            bbox = draw.textbbox((0,0), test_line, font=font)
+            w = bbox[2] - bbox[0]
+            if w <= max_width:
+                line = test_line
+            else:
+                if line:
+                    lines.append(line.strip())
+                line = word + " "
+        if line:
+            lines.append(line.strip())
+    y_text = 100
+    for line in lines:
+        bbox = draw.textbbox((0,0), line, font=font)
+        w = bbox[2] - bbox[0]
+        x = (width - w) // 2
+        draw.text((x, y_text), line, font=font, fill='white')
+        y_text += 50
+    return img
+
 def generate_image(prompt, width, height, style):
     style_map = {
         "Cinematic": "cinematic",
@@ -155,32 +199,21 @@ def generate_image(prompt, width, height, style):
         enhanced_prompt = f"{enhanced_prompt}, {style_param} style"
     encoded = urllib.parse.quote(enhanced_prompt)
     
-    # Try primary URL (image.pollinations.ai)
+    # Primary URL – correct Pollinations.ai endpoint
     url = f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true&seed={random.randint(1,999999)}"
     try:
         response = requests.get(url, timeout=30)
         if response.status_code == 200:
             return Image.open(io.BytesIO(response.content))
         else:
-            st.warning(f"Primary URL returned {response.status_code}. Trying fallback...")
+            st.warning(f"API error ({response.status_code}). Using placeholder image.")
     except Exception as e:
-        st.warning(f"Primary URL error: {e}. Trying fallback...")
+        st.warning(f"Connection error: {e}. Using placeholder image.")
     
-    # Fallback URL (pollinations.ai without 'image.')
-    fallback_url = f"https://pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true&seed={random.randint(1,999999)}"
-    try:
-        response = requests.get(fallback_url, timeout=30)
-        if response.status_code == 200:
-            return Image.open(io.BytesIO(response.content))
-        else:
-            st.error(f"Fallback URL also failed with status {response.status_code}.")
-            return None
-    except Exception as e:
-        st.error(f"Fallback error: {e}")
-        return None
+    # Fallback – create a placeholder with the prompt
+    return create_placeholder_image(width, height, enhanced_prompt)
 
 def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position):
-    """Overlay big, bold, colourful text with glow effect and no underline."""
     img = img.copy()
     w, h = img.size
     draw = ImageDraw.Draw(img)
