@@ -141,17 +141,16 @@ def enhance_prompt(prompt):
     return prompt
 
 def create_placeholder_image(width, height):
-    """Generate a clean dark gradient background – no text – so the overlay stands out."""
+    """Clean dark gradient background (no text) for fallback."""
     img = Image.new('RGB', (width, height))
     draw = ImageDraw.Draw(img)
-    # Gradient from dark blue to deep purple
     for y in range(height):
         ratio = y / height
         r = int(10 + 40 * ratio)
         g = int(20 + 20 * ratio)
         b = int(40 + 80 * ratio)
         draw.line([(0, y), (width, y)], fill=(r, g, b))
-    # Add a subtle glow in the centre
+    # Subtle glow
     center = (width//2, height//2)
     for radius in range(min(width, height)//2, 0, -5):
         alpha = int(10 * (1 - radius / (min(width, height)//2)))
@@ -177,18 +176,33 @@ def generate_image(prompt, width, height, style):
         enhanced_prompt = f"{enhanced_prompt}, {style_param} style"
     encoded = urllib.parse.quote(enhanced_prompt)
     
-    # Primary URL – correct Pollinations.ai endpoint
-    url = f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true&seed={random.randint(1,999999)}"
-    try:
-        response = requests.get(url, timeout=30)
-        if response.status_code == 200:
-            return Image.open(io.BytesIO(response.content))
-        else:
-            st.warning(f"API error ({response.status_code}). Using placeholder gradient.")
-    except Exception as e:
-        st.warning(f"Connection error: {e}. Using placeholder gradient.")
+    # Try multiple endpoints with retry
+    urls = [
+        f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true&seed={random.randint(1,999999)}",
+        f"https://pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true&seed={random.randint(1,999999)}"
+    ]
     
-    # Fallback – clean gradient (no text)
+    for attempt in range(3):  # 3 attempts
+        for url in urls:
+            try:
+                response = requests.get(url, timeout=60)  # Increased timeout
+                if response.status_code == 200:
+                    return Image.open(io.BytesIO(response.content))
+                elif response.status_code == 404:
+                    # URL might be wrong; try the other
+                    continue
+                else:
+                    st.warning(f"Attempt {attempt+1}: API returned {response.status_code}. Retrying...")
+                    time.sleep(2)
+            except requests.exceptions.Timeout:
+                st.warning(f"Attempt {attempt+1}: Timeout. Retrying...")
+                time.sleep(3)
+            except Exception as e:
+                st.warning(f"Attempt {attempt+1}: {e}. Retrying...")
+                time.sleep(2)
+    
+    # All attempts failed – fallback
+    st.warning("Using placeholder gradient (API unavailable).")
     return create_placeholder_image(width, height)
 
 def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position):
