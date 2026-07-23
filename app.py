@@ -6,7 +6,6 @@ import random
 import time
 import urllib.parse
 import os
-import math
 
 # ====== PAGE CONFIG ======
 st.set_page_config(page_title="Be Like Brit Design", page_icon="🎨", layout="wide")
@@ -92,71 +91,17 @@ prompt = st.text_area("Enter your design prompt", height=100,
                       value=st.session_state.get("prompt", ""),
                       key="prompt_input")
 
-# ====== ADVANCED TEXT LAYOUT ======
-st.markdown("### ✏️ Advanced Text Layout (multi‑element)")
-st.caption("Add multiple text blocks with rotation and custom positioning.")
-
-# Store text elements in session state
-if "text_elements" not in st.session_state:
-    st.session_state.text_elements = [
-        {"text": "BRiT", "size": 200, "color": "#87CEEB", "angle": 0, "x": 50, "y": 45},
-        {"text": "LiKE", "size": 160, "color": "#87CEEB", "angle": 270, "x": 40, "y": 48},
-        {"text": "★", "size": 80, "color": "#FFD700", "angle": 0, "x": 33, "y": 35},
-        {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 55, "y": 32},
-        {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 60, "y": 36},
-        {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 65, "y": 40},
-        {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 68, "y": 45},
-        {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 70, "y": 50},
-        {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 70, "y": 55},
-        {"text": "Be", "size": 120, "color": "#87CEEB", "angle": 0, "x": 25, "y": 20},
-    ]
-
-# Display and edit text elements
-for i, el in enumerate(st.session_state.text_elements):
-    st.markdown(f"**Element {i+1}**")
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        new_text = st.text_input(f"Text {i+1}", value=el["text"], key=f"text_{i}")
-    with col2:
-        new_size = st.number_input(f"Size {i+1}", min_value=10, max_value=500, value=el["size"], key=f"size_{i}")
-    with col3:
-        new_color = st.color_picker(f"Color {i+1}", value=el["color"], key=f"color_{i}")
-    col4, col5, col6, col7 = st.columns(4)
-    with col4:
-        new_angle = st.slider(f"Angle {i+1}", -180, 180, value=el["angle"], key=f"angle_{i}")
-    with col5:
-        new_x = st.slider(f"X% {i+1}", 0, 100, value=el["x"], key=f"x_{i}")
-    with col6:
-        new_y = st.slider(f"Y% {i+1}", 0, 100, value=el["y"], key=f"y_{i}")
-    with col7:
-        if st.button(f"Remove {i+1}", key=f"remove_{i}"):
-            del st.session_state.text_elements[i]
-            st.rerun()
-    # Update element
-    st.session_state.text_elements[i] = {"text": new_text, "size": new_size, "color": new_color, "angle": new_angle, "x": new_x, "y": new_y}
-    st.markdown("---")
-
-# Add new element
-col_add1, col_add2 = st.columns([1, 1])
-with col_add1:
-    if st.button("➕ Add Text Element", use_container_width=True):
-        st.session_state.text_elements.append({"text": "New Text", "size": 100, "color": "#FFFFFF", "angle": 0, "x": 50, "y": 50})
-        st.rerun()
-with col_add2:
-    if st.button("🔄 Reset to Preset (Be LiKE BRiT)", use_container_width=True):
-        st.session_state.text_elements = [
-            {"text": "BRiT", "size": 200, "color": "#87CEEB", "angle": 0, "x": 50, "y": 45},
-            {"text": "LiKE", "size": 160, "color": "#87CEEB", "angle": 270, "x": 40, "y": 48},
-            {"text": "★", "size": 80, "color": "#FFD700", "angle": 0, "x": 33, "y": 35},
-            {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 55, "y": 32},
-            {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 60, "y": 36},
-            {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 65, "y": 40},
-            {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 68, "y": 45},
-            {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 70, "y": 50},
-            {"text": "★", "size": 60, "color": "#FFD700", "angle": 0, "x": 70, "y": 55},
-            {"text": "Be", "size": 120, "color": "#87CEEB", "angle": 0, "x": 25, "y": 20},
-        ]
-        st.rerun()
+# ====== TEXT OVERLAY – SIMPLE TITLE & SUBTITLE ======
+st.markdown("### ✏️ Text Overlay (professional & colourful)")
+col1, col2 = st.columns(2)
+with col1:
+    overlay_title = st.text_input("Title text", placeholder="e.g. Be Like Brit Summer 2026")
+    overlay_subtitle = st.text_input("Subtitle text", placeholder="e.g. Design Class by Venite")
+with col2:
+    title_font_size = st.slider("Title font size", 1, 600, 200, step=1)
+    subtitle_font_size = st.slider("Subtitle font size", 1, 600, 100, step=1)
+    text_color = st.color_picker("Text color", "#FFD700")
+    text_position = st.selectbox("Position", ["Top", "Center", "Bottom"])
 
 col_gen, col_clear = st.columns([4, 1])
 with col_gen:
@@ -167,14 +112,16 @@ with col_clear:
         st.session_state.prompt = ""
         st.rerun()
 
-# ====== FONT LOADER ======
+# ====== FONT LOADER – AUTO‑DETECTS ANY .ttf FILE ======
 def get_font(size, bold=True):
+    # Look for any .ttf file in the current folder
     ttf_files = [f for f in os.listdir('.') if f.lower().endswith('.ttf')]
     if ttf_files:
         try:
             return ImageFont.truetype(ttf_files[0], size)
         except:
             pass
+    # Try common system fonts
     font_names = [
         "OpenSans-Bold.ttf", "OpenSans-Regular.ttf",
         "DejaVuSans-Bold.ttf", "DejaVuSans.ttf",
@@ -221,38 +168,56 @@ def generate_image(prompt, width, height, style):
         st.error(f"Connection error: {e}")
         return None
 
-def draw_text_with_rotation(draw, text, font, color, x, y, angle):
-    """Draw text at any angle using PIL's rotate."""
-    # Create a temporary image for the text
-    temp = Image.new('RGBA', (font.getbbox(text)[2] + 20, font.getbbox(text)[3] + 20), (0,0,0,0))
-    temp_draw = ImageDraw.Draw(temp)
-    temp_draw.text((10, 10), text, font=font, fill=color)
-    # Rotate the temp image
-    rotated = temp.rotate(angle, expand=True, resample=Image.BICUBIC)
-    # Paste onto the main image at (x, y) relative to center
-    x_adj = x - rotated.width // 2
-    y_adj = y - rotated.height // 2
-    # Use composite to preserve transparency
-    main = draw._image  # get the underlying PIL image
-    main.paste(rotated, (x_adj, y_adj), rotated)
-
-def add_advanced_text_overlay(img, elements):
-    """Apply all text elements with rotation and position."""
-    img = img.copy().convert('RGBA')
+def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position):
+    """Overlay big, bold, colourful text with glow effect and no underline."""
+    img = img.copy()
     w, h = img.size
     draw = ImageDraw.Draw(img)
-    for el in elements:
-        text = el["text"]
-        size = el["size"]
-        color = el["color"]
-        angle = el["angle"]
-        x_percent = el["x"]
-        y_percent = el["y"]
-        x_pos = int(w * x_percent / 100)
-        y_pos = int(h * y_percent / 100)
-        font = get_font(size, bold=True)
-        draw_text_with_rotation(draw, text, font, color, x_pos, y_pos, angle)
-    return img.convert('RGB')
+    
+    title_font = get_font(title_size, bold=True)
+    subtitle_font = get_font(subtitle_size, bold=True)
+    
+    if position == "Top":
+        y_start = int(h * 0.08)
+    elif position == "Bottom":
+        y_start = int(h * 0.70)
+    else:
+        y_start = int(h * 0.28)
+    
+    temp = Image.new('RGB', (1,1))
+    temp_draw = ImageDraw.Draw(temp)
+    title_bbox = temp_draw.textbbox((0,0), title, font=title_font) if title else (0,0,0,0)
+    subtitle_bbox = temp_draw.textbbox((0,0), subtitle, font=subtitle_font) if subtitle else (0,0,0,0)
+    title_w = title_bbox[2] - title_bbox[0] if title else 0
+    title_h = title_bbox[3] - title_bbox[1] if title else 0
+    sub_w = subtitle_bbox[2] - subtitle_bbox[0] if subtitle else 0
+    sub_h = subtitle_bbox[3] - subtitle_bbox[1] if subtitle else 0
+    
+    y = y_start
+    if title:
+        for offset in range(10, 0, -2):
+            alpha = int(30 * (offset/10))
+            glow_color = (255,255,255, alpha)
+            draw.text((w//2 - title_w//2 + offset//2, y+offset//2), title, font=title_font, fill=glow_color)
+        for dx in range(-4, 5, 2):
+            for dy in range(-4, 5, 2):
+                if dx != 0 or dy != 0:
+                    draw.text((w//2 - title_w//2 + dx, y+dy), title, font=title_font, fill='black')
+        draw.text((w//2 - title_w//2, y), title, font=title_font, fill=color)
+        y += title_h + 25
+    
+    if subtitle:
+        for offset in range(6, 0, -2):
+            alpha = int(20 * (offset/6))
+            glow_color = (255,255,255, alpha)
+            draw.text((w//2 - sub_w//2 + offset//2, y+offset//2), subtitle, font=subtitle_font, fill=glow_color)
+        for dx in range(-3, 4, 2):
+            for dy in range(-3, 4, 2):
+                if dx != 0 or dy != 0:
+                    draw.text((w//2 - sub_w//2 + dx, y+dy), subtitle, font=subtitle_font, fill='black')
+        draw.text((w//2 - sub_w//2, y), subtitle, font=subtitle_font, fill=color)
+        # NO underline
+    return img
 
 def add_background(img, bg_color, output_size=(1200, 1200)):
     canvas = Image.new('RGB', output_size, bg_color)
@@ -267,8 +232,8 @@ if generate and prompt:
     with st.spinner("🎨 Creating your design..."):
         img = generate_image(prompt, width, height, style)
         if img:
-            # Apply advanced text overlay
-            img = add_advanced_text_overlay(img, st.session_state.text_elements)
+            if overlay_title or overlay_subtitle:
+                img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
             
             st.markdown("### ✨ Generated Design")
             col_display, col_info = st.columns([2, 1])
