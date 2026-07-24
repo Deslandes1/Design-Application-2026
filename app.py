@@ -7,6 +7,7 @@ import time
 import urllib.parse
 import os
 import tempfile
+import numpy as np  # Required for MoviePy + PIL image conversion
 
 # ====== PAGE CONFIG ======
 st.set_page_config(page_title="Be Like Brit Design", page_icon="🎨", layout="wide")
@@ -143,7 +144,7 @@ with col2:
 
 st.markdown("---")
 
-# ====== NEW: LOGO OVERLAY (OPTIONAL) ======
+# ====== LOGO OVERLAY (OPTIONAL) ======
 st.markdown("### 🖼️ Logo Overlay (Optional)")
 st.caption("Upload a logo or image to place in a corner. PNG with transparency works best.")
 col_logo1, col_logo2 = st.columns(2)
@@ -338,11 +339,7 @@ def add_background(img, bg_color, output_size=(1200, 1200)):
     canvas.paste(img, (x, y))
     return canvas
 
-# ====== NEW: LOGO OVERLAY FOR IMAGES ======
 def add_logo_overlay(img, logo_bytes, corner, size_percent):
-    """
-    Overlays a logo/image onto the given PIL Image.
-    """
     if logo_bytes is None:
         return img
     try:
@@ -353,13 +350,11 @@ def add_logo_overlay(img, logo_bytes, corner, size_percent):
 
     img = img.copy()
     w, h = img.size
-    # Resize logo based on canvas width
     logo_w = int(w * size_percent)
     logo_h = int(logo_w * (logo.height / logo.width))
     logo = logo.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
-    padding = int(w * 0.02)  # 2% margin
+    padding = int(w * 0.02)
 
-    x, y = 0, 0
     if corner == "Top Left":
         x, y = padding, padding
     elif corner == "Top Right":
@@ -369,24 +364,74 @@ def add_logo_overlay(img, logo_bytes, corner, size_percent):
     else:  # Bottom Right
         x, y = w - logo_w - padding, h - logo_h - padding
 
-    # Paste with transparency if available
     if logo.mode == 'RGBA':
         img.paste(logo, (x, y), logo.split()[3])
     else:
         img.paste(logo, (x, y))
     return img
 
-# ====== VIDEO PROCESSING (UPDATED WITH LOGO) ======
+# ====== VIDEO PROCESSING (FIXED – NO IMAGEMAGICK) ======
+def create_text_image_for_video(width, height, title, subtitle, title_size, subtitle_size, color, position):
+    """
+    Create a transparent PIL image (RGBA) with title/subtitle drawn using PIL.
+    This replicates the exact styling from the image overlay function.
+    """
+    img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    font_title = get_font(title_size, bold=True)
+    font_sub = get_font(subtitle_size, bold=True)
+    
+    temp = Image.new('RGB', (1, 1))
+    temp_draw = ImageDraw.Draw(temp)
+    
+    if title:
+        bbox = temp_draw.textbbox((0, 0), title, font=font_title)
+        title_w = bbox[2] - bbox[0]
+        title_h = bbox[3] - bbox[1]
+    else:
+        title_w = title_h = 0
+        
+    if subtitle:
+        bbox = temp_draw.textbbox((0, 0), subtitle, font=font_sub)
+        sub_w = bbox[2] - bbox[0]
+        sub_h = bbox[3] - bbox[1]
+    else:
+        sub_w = sub_h = 0
+    
+    if position == "Top":
+        y_start = int(height * 0.08)
+    elif position == "Bottom":
+        y_start = int(height * 0.70)
+    else:
+        y_start = int(height * 0.28)
+    
+    y = y_start
+    
+    if title:
+        x = (width - title_w) // 2
+        for dx in range(-4, 5, 2):
+            for dy in range(-4, 5, 2):
+                if dx != 0 or dy != 0:
+                    draw.text((x + dx, y + dy), title, font=font_title, fill='black')
+        draw.text((x, y), title, font=font_title, fill=color)
+        y += title_h + 25
+    
+    if subtitle:
+        x = (width - sub_w) // 2
+        for dx in range(-3, 4, 2):
+            for dy in range(-3, 4, 2):
+                if dx != 0 or dy != 0:
+                    draw.text((x + dx, y + dy), subtitle, font=font_sub, fill='black')
+        draw.text((x, y), subtitle, font=font_sub, fill=color)
+    
+    return img
+
 def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle_size, color, position, logo_bytes, logo_corner, logo_size_percent):
     try:
-        from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, ImageClip
+        from moviepy.editor import VideoFileClip, CompositeVideoClip, ImageClip
     except ImportError:
         st.error("MoviePy is not installed. Please run: pip install moviepy")
-        return None
-
-    font_path = get_font_path()
-    if font_path is None:
-        st.error("No .ttf font found. Please upload a TrueType font (.ttf) file to the app folder for video text overlay.")
         return None
 
     # Save uploaded video to temp file
@@ -396,7 +441,6 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
 
     try:
         clip = VideoFileClip(input_path)
-        # Limit to 60 seconds to avoid memory issues
         if clip.duration > 60:
             st.warning(f"Video is {clip.duration:.1f}s long. Processing only the first 60 seconds.")
             clip = clip.subclip(0, 60)
@@ -404,48 +448,16 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         w, h = clip.size
         clips_to_composite = [clip]
 
-        # Position mapping for text
-        if position == "Top":
-            txt_y = int(h * 0.08)
-        elif position == "Bottom":
-            txt_y = int(h * 0.70)
-        else:
-            txt_y = int(h * 0.28)
+        # ---- Create text overlay using PIL (no ImageMagick) ----
+        text_pil = create_text_image_for_video(
+            w, h, title, subtitle, title_size, subtitle_size, color, position
+        )
+        text_np = np.array(text_pil)          # shape (h, w, 4)
+        text_clip = ImageClip(text_np).set_duration(clip.duration)
+        text_clip = text_clip.set_position((0, 0))
+        clips_to_composite.append(text_clip)
 
-        y_offset = txt_y
-
-        # ---- Add Title ----
-        if title:
-            title_clip = TextClip(
-                title,
-                fontsize=title_size,
-                color=color,
-                font=font_path,
-                stroke_color='black',
-                stroke_width=2,
-                method='caption',
-                size=(w * 0.9, None)
-            )
-            title_clip = title_clip.set_position(('center', y_offset)).set_duration(clip.duration)
-            clips_to_composite.append(title_clip)
-            y_offset += title_clip.h + 25
-
-        # ---- Add Subtitle ----
-        if subtitle:
-            sub_clip = TextClip(
-                subtitle,
-                fontsize=subtitle_size,
-                color=color,
-                font=font_path,
-                stroke_color='black',
-                stroke_width=2,
-                method='caption',
-                size=(w * 0.9, None)
-            )
-            sub_clip = sub_clip.set_position(('center', y_offset)).set_duration(clip.duration)
-            clips_to_composite.append(sub_clip)
-
-        # ---- NEW: Add Logo ----
+        # ---- Add Logo (if provided) ----
         if logo_bytes is not None:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_logo:
                 tmp_logo.write(logo_bytes)
@@ -462,7 +474,7 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
                     pos = (w - logo_w - padding, padding)
                 elif logo_corner == "Bottom Left":
                     pos = (padding, h - logo_h - padding)
-                else:  # Bottom Right
+                else:
                     pos = (w - logo_w - padding, h - logo_h - padding)
                 logo_clip = logo_clip.set_position(pos).set_duration(clip.duration)
                 clips_to_composite.append(logo_clip)
@@ -477,11 +489,18 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
             return clip
 
         final_clip = CompositeVideoClip(clips_to_composite)
-        # Write to temp output
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_output:
             output_path = tmp_output.name
 
-        final_clip.write_videofile(output_path, fps=clip.fps, codec='libx264', audio_codec='aac', verbose=False, logger=None)
+        final_clip.write_videofile(
+            output_path,
+            fps=clip.fps,
+            codec='libx264',
+            audio_codec='aac',
+            verbose=False,
+            logger=None
+        )
         return output_path
 
     except Exception as e:
@@ -502,7 +521,6 @@ if generate:
                 if img:
                     if overlay_title or overlay_subtitle:
                         img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
-                    # ---- NEW: apply logo ----
                     img = add_logo_overlay(img, uploaded_logo.read() if uploaded_logo else None, logo_corner, logo_size_percent)
                     
                     st.markdown("### ✨ Generated Design")
@@ -535,7 +553,6 @@ if generate:
                             mime="image/png",
                             use_container_width=True
                         )
-                    # Save to history
                     if "history" not in st.session_state:
                         st.session_state.history = []
                     st.session_state.history.append({
@@ -558,7 +575,6 @@ if generate:
                 img = img.resize((width, height), Image.Resampling.LANCZOS)
                 if overlay_title or overlay_subtitle:
                     img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
-                # ---- NEW: apply logo ----
                 img = add_logo_overlay(img, uploaded_logo.read() if uploaded_logo else None, logo_corner, logo_size_percent)
                 
                 st.markdown("### ✨ Designed Image")
