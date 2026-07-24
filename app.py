@@ -184,12 +184,10 @@ with col_logo2:
 st.markdown("---")
 
 # ====== 🎵 BACKGROUND AUDIO (for video/slideshow modes) ======
-# Only show this section if the mode is video or slideshow
 if mode in ["🎬 Upload Video", "🎬 Slideshow (Multiple Clips)"]:
     st.markdown("### 🎵 Background Audio (Optional)")
     st.caption("Choose a preset sound or upload your own.")
 
-    # Preset sound options
     PRESET_SOUNDS = {
         "None": None,
         "Joy (Happy)": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
@@ -204,7 +202,6 @@ if mode in ["🎬 Upload Video", "🎬 Slideshow (Multiple Clips)"]:
     sound_options = list(PRESET_SOUNDS.keys())
     selected_sound = st.selectbox("Select background sound", sound_options, index=0, key="bg_sound_selector")
 
-    # If "Custom" is selected, show file uploader
     custom_audio_upload = None
     if selected_sound == "Custom (upload your own)":
         custom_audio_upload = st.file_uploader(
@@ -215,12 +212,9 @@ if mode in ["🎬 Upload Video", "🎬 Slideshow (Multiple Clips)"]:
         if custom_audio_upload:
             st.success(f"✅ Audio loaded: {custom_audio_upload.name}")
 
-    # Mute original audio checkbox
     mute_original_audio = st.checkbox("Mute original video audio (use background only)", value=True, key="mute_audio_video")
-
     st.markdown("---")
 
-# ====== SLIDESHOW‑SPECIFIC SETTINGS (image duration) ======
 if mode == "🎬 Slideshow (Multiple Clips)":
     image_duration = st.slider("Image duration (seconds)", 1, 10, 3, key="img_dur_slideshow")
 
@@ -425,7 +419,7 @@ def add_logo_overlay(img, logo_bytes, corner, size_percent):
         img.paste(logo, (x, y))
     return img
 
-# ====== VIDEO PROCESSING (SINGLE) – UPDATED WITH AUDIO ======
+# ====== VIDEO PROCESSING (SINGLE) ======
 def create_text_image_for_video(width, height, title, subtitle, title_size, subtitle_size, color, position):
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -585,7 +579,20 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         if os.path.exists(input_path):
             os.unlink(input_path)
 
-# ====== SLIDESHOW FUNCTION (UPDATED) ======
+# ====== SLIDESHOW FUNCTION – FIXED ======
+def resize_clip_with_pil(clip, target_w, target_h):
+    """
+    Resize a MoviePy clip to target width/height using PIL with LANCZOS,
+    avoiding the deprecated Image.ANTIALIAS.
+    """
+    def resize_frame(frame):
+        # frame is a numpy array (h,w,c) or (h,w) for grayscale
+        pil_img = Image.fromarray(frame)
+        # Resize with LANCZOS (replaces ANTIALIAS)
+        resized = pil_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        return np.array(resized)
+    return clip.fl_image(resize_frame)
+
 def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
                      title, subtitle, title_size, subtitle_size, color, position,
                      logo_bytes, logo_corner, logo_size_percent):
@@ -601,6 +608,7 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
 
     clips = []
     temp_paths = []
+    first_video_fps = 24  # fallback
 
     for file_obj in uploaded_files:
         ext = os.path.splitext(file_obj.name)[1].lower()
@@ -611,6 +619,8 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
             temp_paths.append(tmp_path)
             try:
                 clip = VideoFileClip(tmp_path)
+                if first_video_fps == 24 and hasattr(clip, 'fps') and clip.fps:
+                    first_video_fps = clip.fps
                 clips.append(clip)
             except Exception as e:
                 st.warning(f"Could not load video {file_obj.name}: {e}")
@@ -624,6 +634,7 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
                     img.save(tmp_img, format='PNG')
                     tmp_path = tmp_img.name
                 temp_paths.append(tmp_path)
+                # ImageClip will have no fps – we'll set duration
                 clip = ImageClip(tmp_path).set_duration(image_duration)
                 clips.append(clip)
             except Exception as e:
@@ -636,14 +647,16 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
         st.error("No valid clips to create slideshow.")
         return None
 
-    # Resize all clips to target size (width, height from sidebar)
+    # Resize all clips to target size using PIL LANCZOS
     target_w = width
     target_h = height
     resized_clips = []
     for clip in clips:
         if clip.size != (target_w, target_h):
-            clip = clip.resize(width=target_w, height=target_h)
+            clip = resize_clip_with_pil(clip, target_w, target_h)
         resized_clips.append(clip)
+
+    # Concatenate
     final_clip = concatenate_videoclips(resized_clips, method="compose")
 
     # ---- Background audio ----
@@ -673,7 +686,9 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
             st.warning(f"Could not process background audio: {e}")
 
     # ---- Text overlay ----
-    text_pil = create_text_image_for_video(target_w, target_h, title, subtitle, title_size, subtitle_size, color, position)
+    text_pil = create_text_image_for_video(
+        target_w, target_h, title, subtitle, title_size, subtitle_size, color, position
+    )
     text_np = np.array(text_pil)
     text_clip = ImageClip(text_np).set_duration(final_clip.duration).set_position((0, 0))
     overlays = [final_clip, text_clip]
@@ -707,7 +722,13 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_output:
         output_path = tmp_output.name
 
-    fps = clips[0].fps if hasattr(clips[0], 'fps') and clips[0].fps else 24
+    # Determine fps: take from first video clip, else 24
+    fps = first_video_fps
+    for c in resized_clips:
+        if hasattr(c, 'fps') and c.fps:
+            fps = c.fps
+            break
+
     final_composite.write_videofile(
         output_path,
         fps=fps,
@@ -730,7 +751,7 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
 if generate:
     # ----- Determine audio bytes for video/slideshow modes -----
     audio_bytes = None
-    mute_audio = True  # default
+    mute_audio = True
     if mode in ["🎬 Upload Video", "🎬 Slideshow (Multiple Clips)"]:
         mute_audio = mute_original_audio if 'mute_original_audio' in locals() else True
         if selected_sound != "None":
@@ -738,7 +759,6 @@ if generate:
                 if custom_audio_upload:
                     audio_bytes = custom_audio_upload.read()
             else:
-                # Download preset sound
                 url = PRESET_SOUNDS.get(selected_sound)
                 if url:
                     try:
