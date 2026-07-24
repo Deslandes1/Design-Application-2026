@@ -6,7 +6,7 @@ import random
 import time
 import urllib.parse
 import os
-import tempfile  # NEW for video processing
+import tempfile
 
 # ====== PAGE CONFIG ======
 st.set_page_config(page_title="Be Like Brit Design", page_icon="🎨", layout="wide")
@@ -68,7 +68,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ====== MODE SELECTION (NEW) ======
+# ====== MODE SELECTION ======
 mode = st.radio(
     "Choose your design source:",
     ["🎨 AI Generation (Text)", "🖼️ Upload Image", "🎬 Upload Video"],
@@ -84,7 +84,6 @@ uploaded_video = None
 prompt = ""
 
 if mode == "🎨 AI Generation (Text)":
-    # ---- ORIGINAL PROMPT & PRESETS ----
     st.markdown("Describe your dream design – I'll bring it to life.")
     presets = [
         "Futuristic cityscape at sunset, neon lights, cyberpunk style",
@@ -126,12 +125,11 @@ elif mode == "🎬 Upload Video":
         key="vid_uploader"
     )
     if uploaded_video is not None:
-        # Just show a placeholder – video preview in Streamlit is tricky, so we show a success message.
         st.success(f"✅ Video loaded: {uploaded_video.name} (Size: {uploaded_video.size // 1024} KB)")
 
 st.markdown("---")
 
-# ====== TEXT OVERLAY – SIMPLE TITLE & SUBTITLE (UNCHANGED) ======
+# ====== TEXT OVERLAY ======
 st.markdown("### ✏️ Text Overlay (professional & colourful)")
 col1, col2 = st.columns(2)
 with col1:
@@ -142,6 +140,32 @@ with col2:
     subtitle_font_size = st.slider("Subtitle font size", 1, 600, 100, step=1)
     text_color = st.color_picker("Text color", "#FFD700")
     text_position = st.selectbox("Position", ["Top", "Center", "Bottom"])
+
+st.markdown("---")
+
+# ====== NEW: LOGO OVERLAY (OPTIONAL) ======
+st.markdown("### 🖼️ Logo Overlay (Optional)")
+st.caption("Upload a logo or image to place in a corner. PNG with transparency works best.")
+col_logo1, col_logo2 = st.columns(2)
+with col_logo1:
+    uploaded_logo = st.file_uploader(
+        "Upload logo (PNG/JPG)",
+        type=["png", "jpg", "jpeg", "webp"],
+        key="logo_uploader"
+    )
+with col_logo2:
+    logo_corner = st.selectbox(
+        "Corner position",
+        ["Top Left", "Top Right", "Bottom Left", "Bottom Right"],
+        key="logo_corner"
+    )
+    logo_size_percent = st.slider(
+        "Logo size (% of canvas width)",
+        5, 30, 15,
+        key="logo_size"
+    ) / 100.0
+
+st.markdown("---")
 
 # ====== GENERATE BUTTON ======
 col_gen, col_clear = st.columns([4, 1])
@@ -154,7 +178,7 @@ with col_clear:
             st.session_state.prompt = ""
         st.rerun()
 
-# ====== FONT LOADER – AUTO‑DETECTS ANY .ttf FILE ======
+# ====== FONT LOADER ======
 def get_font(size, bold=True):
     ttf_files = [f for f in os.listdir('.') if f.lower().endswith('.ttf')]
     if ttf_files:
@@ -180,7 +204,6 @@ def get_font_path():
     ttf_files = [f for f in os.listdir('.') if f.lower().endswith('.ttf')]
     if ttf_files:
         return os.path.abspath(ttf_files[0])
-    # Try common system fonts
     common_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
@@ -191,7 +214,7 @@ def get_font_path():
             return path
     return None
 
-# ====== GENERATION FUNCTIONS (ORIGINAL) ======
+# ====== ORIGINAL GENERATION FUNCTIONS ======
 def enhance_prompt(prompt):
     quality_keywords = "high quality, professional, detailed, 8k, sharp focus, vibrant colors"
     if not any(kw in prompt.lower() for kw in ["high quality", "professional", "detailed", "8k"]):
@@ -199,7 +222,6 @@ def enhance_prompt(prompt):
     return prompt
 
 def create_placeholder_image(width, height):
-    """Clean dark gradient background (no text) for fallback."""
     img = Image.new('RGB', (width, height))
     draw = ImageDraw.Draw(img)
     for y in range(height):
@@ -316,10 +338,48 @@ def add_background(img, bg_color, output_size=(1200, 1200)):
     canvas.paste(img, (x, y))
     return canvas
 
-# ====== VIDEO PROCESSING FUNCTION (NEW) ======
-def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle_size, color, position):
+# ====== NEW: LOGO OVERLAY FOR IMAGES ======
+def add_logo_overlay(img, logo_bytes, corner, size_percent):
+    """
+    Overlays a logo/image onto the given PIL Image.
+    """
+    if logo_bytes is None:
+        return img
     try:
-        from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+        logo = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
+    except:
+        st.warning("Could not open logo file. Skipping logo overlay.")
+        return img
+
+    img = img.copy()
+    w, h = img.size
+    # Resize logo based on canvas width
+    logo_w = int(w * size_percent)
+    logo_h = int(logo_w * (logo.height / logo.width))
+    logo = logo.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
+    padding = int(w * 0.02)  # 2% margin
+
+    x, y = 0, 0
+    if corner == "Top Left":
+        x, y = padding, padding
+    elif corner == "Top Right":
+        x, y = w - logo_w - padding, padding
+    elif corner == "Bottom Left":
+        x, y = padding, h - logo_h - padding
+    else:  # Bottom Right
+        x, y = w - logo_w - padding, h - logo_h - padding
+
+    # Paste with transparency if available
+    if logo.mode == 'RGBA':
+        img.paste(logo, (x, y), logo.split()[3])
+    else:
+        img.paste(logo, (x, y))
+    return img
+
+# ====== VIDEO PROCESSING (UPDATED WITH LOGO) ======
+def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle_size, color, position, logo_bytes, logo_corner, logo_size_percent):
+    try:
+        from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, ImageClip
     except ImportError:
         st.error("MoviePy is not installed. Please run: pip install moviepy")
         return None
@@ -342,8 +402,9 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
             clip = clip.subclip(0, 60)
 
         w, h = clip.size
+        clips_to_composite = [clip]
 
-        # Position mapping
+        # Position mapping for text
         if position == "Top":
             txt_y = int(h * 0.08)
         elif position == "Bottom":
@@ -351,9 +412,9 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         else:
             txt_y = int(h * 0.28)
 
-        text_clips = []
         y_offset = txt_y
 
+        # ---- Add Title ----
         if title:
             title_clip = TextClip(
                 title,
@@ -366,9 +427,10 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
                 size=(w * 0.9, None)
             )
             title_clip = title_clip.set_position(('center', y_offset)).set_duration(clip.duration)
-            text_clips.append(title_clip)
+            clips_to_composite.append(title_clip)
             y_offset += title_clip.h + 25
 
+        # ---- Add Subtitle ----
         if subtitle:
             sub_clip = TextClip(
                 subtitle,
@@ -381,13 +443,40 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
                 size=(w * 0.9, None)
             )
             sub_clip = sub_clip.set_position(('center', y_offset)).set_duration(clip.duration)
-            text_clips.append(sub_clip)
+            clips_to_composite.append(sub_clip)
 
-        if not text_clips:
-            st.warning("No title or subtitle to overlay. Returning original video.")
+        # ---- NEW: Add Logo ----
+        if logo_bytes is not None:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_logo:
+                tmp_logo.write(logo_bytes)
+                logo_path = tmp_logo.name
+            try:
+                logo_clip = ImageClip(logo_path).set_duration(clip.duration)
+                logo_w = int(w * logo_size_percent)
+                logo_h = int(logo_w * (logo_clip.h / logo_clip.w))
+                logo_clip = logo_clip.resize(width=logo_w, height=logo_h)
+                padding = int(w * 0.02)
+                if logo_corner == "Top Left":
+                    pos = (padding, padding)
+                elif logo_corner == "Top Right":
+                    pos = (w - logo_w - padding, padding)
+                elif logo_corner == "Bottom Left":
+                    pos = (padding, h - logo_h - padding)
+                else:  # Bottom Right
+                    pos = (w - logo_w - padding, h - logo_h - padding)
+                logo_clip = logo_clip.set_position(pos).set_duration(clip.duration)
+                clips_to_composite.append(logo_clip)
+            except Exception as e:
+                st.warning(f"Could not add logo to video: {e}")
+            finally:
+                if os.path.exists(logo_path):
+                    os.unlink(logo_path)
+
+        if len(clips_to_composite) == 1:
+            st.warning("No title, subtitle, or logo to overlay. Returning original video.")
             return clip
 
-        final_clip = CompositeVideoClip([clip] + text_clips)
+        final_clip = CompositeVideoClip(clips_to_composite)
         # Write to temp output
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_output:
             output_path = tmp_output.name
@@ -399,14 +488,12 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         st.error(f"Video processing error: {e}")
         return None
     finally:
-        # Clean up input temp file
         if os.path.exists(input_path):
             os.unlink(input_path)
 
 # ====== MAIN GENERATION LOGIC ======
 if generate:
     if mode == "🎨 AI Generation (Text)":
-        # ---- ORIGINAL AI GENERATION ----
         if not prompt:
             st.warning("Please enter a prompt.")
         else:
@@ -415,6 +502,8 @@ if generate:
                 if img:
                     if overlay_title or overlay_subtitle:
                         img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
+                    # ---- NEW: apply logo ----
+                    img = add_logo_overlay(img, uploaded_logo.read() if uploaded_logo else None, logo_corner, logo_size_percent)
                     
                     st.markdown("### ✨ Generated Design")
                     col_display, col_info = st.columns([2, 1])
@@ -461,16 +550,16 @@ if generate:
                         st.session_state.history = st.session_state.history[-20:]
 
     elif mode == "🖼️ Upload Image":
-        # ---- NEW: UPLOAD IMAGE ----
         if uploaded_image is None:
             st.warning("Please upload an image first.")
         else:
             with st.spinner("🖼️ Applying design to your image..."):
                 img = Image.open(uploaded_image)
-                # Resize to selected dimensions for consistency
                 img = img.resize((width, height), Image.Resampling.LANCZOS)
                 if overlay_title or overlay_subtitle:
                     img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
+                # ---- NEW: apply logo ----
+                img = add_logo_overlay(img, uploaded_logo.read() if uploaded_logo else None, logo_corner, logo_size_percent)
                 
                 st.markdown("### ✨ Designed Image")
                 col_display, col_info = st.columns([2, 1])
@@ -501,7 +590,6 @@ if generate:
                         mime="image/png",
                         use_container_width=True
                     )
-                # Save to history (store the processed image)
                 if "history" not in st.session_state:
                     st.session_state.history = []
                 st.session_state.history.append({
@@ -516,13 +604,11 @@ if generate:
                     st.session_state.history = st.session_state.history[-20:]
 
     elif mode == "🎬 Upload Video":
-        # ---- NEW: UPLOAD VIDEO ----
         if uploaded_video is None:
             st.warning("Please upload a video first.")
-        elif not (overlay_title or overlay_subtitle):
-            st.warning("Please enter at least a Title or Subtitle to overlay on the video.")
         else:
-            with st.spinner("🎬 Processing video with text overlay... This may take a moment."):
+            with st.spinner("🎬 Processing video with overlays... This may take a moment."):
+                logo_bytes = uploaded_logo.read() if uploaded_logo else None
                 output_path = process_video_with_overlay(
                     uploaded_video,
                     overlay_title,
@@ -530,12 +616,14 @@ if generate:
                     title_font_size,
                     subtitle_font_size,
                     text_color,
-                    text_position
+                    text_position,
+                    logo_bytes,
+                    logo_corner,
+                    logo_size_percent
                 )
                 if output_path and os.path.exists(output_path):
                     st.success("✅ Video processed successfully!")
                     st.markdown("### 🎬 Designed Video")
-                    # Provide download button
                     with open(output_path, "rb") as f:
                         video_bytes = f.read()
                     st.download_button(
@@ -545,8 +633,6 @@ if generate:
                         mime="video/mp4",
                         use_container_width=True
                     )
-                    # Clean up output file after download (optional, cleanup on rerun)
-                    # We'll just let the OS handle it eventually, but we can delete after read.
                     os.unlink(output_path)
                 else:
                     st.error("Video processing failed. Please check the logs.")
@@ -565,11 +651,7 @@ if "history" in st.session_state and st.session_state.history:
                 col_a, col_b = st.columns(2)
                 with col_a:
                     if st.button("♻️ Reuse", key=f"reuse_{idx}"):
-                        # If it's an uploaded image, we can't easily reuse the file, so just set the prompt text
-                        if "Uploaded" in item["prompt"]:
-                            st.session_state.prompt = item["prompt"]
-                        else:
-                            st.session_state.prompt = item["prompt"]
+                        st.session_state.prompt = item["prompt"]
                         st.rerun()
                 with col_b:
                     if st.button("❌ Delete", key=f"del_{idx}"):
