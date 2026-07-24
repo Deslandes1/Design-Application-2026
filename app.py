@@ -579,16 +579,14 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         if os.path.exists(input_path):
             os.unlink(input_path)
 
-# ====== SLIDESHOW FUNCTION – FIXED ======
+# ====== SLIDESHOW FUNCTION – FIXED (added CompositeVideoClip import) ======
 def resize_clip_with_pil(clip, target_w, target_h):
     """
     Resize a MoviePy clip to target width/height using PIL with LANCZOS,
     avoiding the deprecated Image.ANTIALIAS.
     """
     def resize_frame(frame):
-        # frame is a numpy array (h,w,c) or (h,w) for grayscale
         pil_img = Image.fromarray(frame)
-        # Resize with LANCZOS (replaces ANTIALIAS)
         resized = pil_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
         return np.array(resized)
     return clip.fl_image(resize_frame)
@@ -597,7 +595,10 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
                      title, subtitle, title_size, subtitle_size, color, position,
                      logo_bytes, logo_corner, logo_size_percent):
     try:
-        from moviepy.editor import VideoFileClip, ImageClip, concatenate_videoclips, AudioFileClip, CompositeAudioClip
+        from moviepy.editor import (
+            VideoFileClip, ImageClip, concatenate_videoclips,
+            AudioFileClip, CompositeAudioClip, CompositeVideoClip  # ← added CompositeVideoClip
+        )
     except ImportError:
         st.error("MoviePy is not installed. Please run: pip install moviepy")
         return None
@@ -634,7 +635,6 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
                     img.save(tmp_img, format='PNG')
                     tmp_path = tmp_img.name
                 temp_paths.append(tmp_path)
-                # ImageClip will have no fps – we'll set duration
                 clip = ImageClip(tmp_path).set_duration(image_duration)
                 clips.append(clip)
             except Exception as e:
@@ -722,7 +722,6 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_output:
         output_path = tmp_output.name
 
-    # Determine fps: take from first video clip, else 24
     fps = first_video_fps
     for c in resized_clips:
         if hasattr(c, 'fps') and c.fps:
