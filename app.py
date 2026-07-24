@@ -82,7 +82,7 @@ st.markdown("---")
 # ====== INPUT SECTION – CONDITIONAL ======
 uploaded_image = None
 uploaded_video = None
-uploaded_files = None  # for slideshow
+uploaded_files = None
 prompt = ""
 
 if mode == "🎨 AI Generation (Text)":
@@ -183,7 +183,7 @@ with col_logo2:
 
 st.markdown("---")
 
-# ====== 🎵 BACKGROUND AUDIO (for video/slideshow modes) ======
+# ====== BACKGROUND AUDIO ======
 if mode in ["🎬 Upload Video", "🎬 Slideshow (Multiple Clips)"]:
     st.markdown("### 🎵 Background Audio (Optional)")
     st.caption("Choose a preset sound or upload your own.")
@@ -212,7 +212,7 @@ if mode in ["🎬 Upload Video", "🎬 Slideshow (Multiple Clips)"]:
         if custom_audio_upload:
             st.success(f"✅ Audio loaded: {custom_audio_upload.name}")
 
-    mute_original_audio = st.checkbox("Mute original video audio (use background only)", value=True, key="mute_audio_video")
+    # For slideshow, we no longer need the global mute checkbox – we'll handle per clip.
     st.markdown("---")
 
 if mode == "🎬 Slideshow (Multiple Clips)":
@@ -419,7 +419,7 @@ def add_logo_overlay(img, logo_bytes, corner, size_percent):
         img.paste(logo, (x, y))
     return img
 
-# ====== VIDEO PROCESSING (SINGLE) ======
+# ====== VIDEO PROCESSING (SINGLE) – unchanged ======
 def create_text_image_for_video(width, height, title, subtitle, title_size, subtitle_size, color, position):
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -494,7 +494,6 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         w, h = clip.size
         clips_to_composite = [clip]
 
-        # Text overlay
         text_pil = create_text_image_for_video(
             w, h, title, subtitle, title_size, subtitle_size, color, position
         )
@@ -502,7 +501,6 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         text_clip = ImageClip(text_np).set_duration(clip.duration).set_position((0, 0))
         clips_to_composite.append(text_clip)
 
-        # Logo overlay
         if logo_bytes is not None:
             try:
                 logo_pil = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
@@ -531,7 +529,6 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
 
         final_clip = CompositeVideoClip(clips_to_composite)
 
-        # ---- Background audio ----
         if audio_bytes is not None:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_audio:
                 tmp_audio.write(audio_bytes)
@@ -579,25 +576,26 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         if os.path.exists(input_path):
             os.unlink(input_path)
 
-# ====== SLIDESHOW FUNCTION – FIXED (added CompositeVideoClip import) ======
+# ====== SLIDESHOW – UPDATED WITH PER‑CLIP AUDIO CONTROL ======
 def resize_clip_with_pil(clip, target_w, target_h):
-    """
-    Resize a MoviePy clip to target width/height using PIL with LANCZOS,
-    avoiding the deprecated Image.ANTIALIAS.
-    """
     def resize_frame(frame):
         pil_img = Image.fromarray(frame)
         resized = pil_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
         return np.array(resized)
     return clip.fl_image(resize_frame)
 
-def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
+def create_slideshow(uploaded_files, image_duration, audio_bytes,
                      title, subtitle, title_size, subtitle_size, color, position,
                      logo_bytes, logo_corner, logo_size_percent):
+    """
+    Creates a slideshow with per‑clip audio:
+    - Images: background music at full volume.
+    - Videos: original audio at full volume, background music at 10% volume.
+    """
     try:
         from moviepy.editor import (
             VideoFileClip, ImageClip, concatenate_videoclips,
-            AudioFileClip, CompositeAudioClip, CompositeVideoClip  # ← added CompositeVideoClip
+            AudioFileClip, CompositeAudioClip, CompositeVideoClip
         )
     except ImportError:
         st.error("MoviePy is not installed. Please run: pip install moviepy")
@@ -607,9 +605,10 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
         st.warning("No files uploaded.")
         return None
 
-    clips = []
+    # We'll store clips and a flag for each: True if it's a video (has audio)
+    clip_infos = []  # list of (clip, is_video)
     temp_paths = []
-    first_video_fps = 24  # fallback
+    first_video_fps = 24
 
     for file_obj in uploaded_files:
         ext = os.path.splitext(file_obj.name)[1].lower()
@@ -622,7 +621,7 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
                 clip = VideoFileClip(tmp_path)
                 if first_video_fps == 24 and hasattr(clip, 'fps') and clip.fps:
                     first_video_fps = clip.fps
-                clips.append(clip)
+                clip_infos.append((clip, True))  # is_video = True
             except Exception as e:
                 st.warning(f"Could not load video {file_obj.name}: {e}")
                 continue
@@ -636,64 +635,115 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
                     tmp_path = tmp_img.name
                 temp_paths.append(tmp_path)
                 clip = ImageClip(tmp_path).set_duration(image_duration)
-                clips.append(clip)
+                clip_infos.append((clip, False))  # is_video = False
             except Exception as e:
                 st.warning(f"Could not load image {file_obj.name}: {e}")
                 continue
         else:
             st.warning(f"Unsupported file type: {file_obj.name}")
 
-    if not clips:
+    if not clip_infos:
         st.error("No valid clips to create slideshow.")
         return None
 
-    # Resize all clips to target size using PIL LANCZOS
     target_w = width
     target_h = height
+
+    # Resize all clips
     resized_clips = []
-    for clip in clips:
+    is_video_flags = []
+    for clip, is_video in clip_infos:
         if clip.size != (target_w, target_h):
             clip = resize_clip_with_pil(clip, target_w, target_h)
         resized_clips.append(clip)
+        is_video_flags.append(is_video)
 
-    # Concatenate
-    final_clip = concatenate_videoclips(resized_clips, method="compose")
+    # Total duration
+    total_dur = sum(c.duration for c in resized_clips)
 
-    # ---- Background audio ----
+    # Prepare background audio (if any)
+    bg_audio_full = None
     if audio_bytes is not None:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_audio:
             tmp_audio.write(audio_bytes)
             audio_path = tmp_audio.name
         temp_paths.append(audio_path)
         try:
-            bg_audio = AudioFileClip(audio_path)
-            if bg_audio.duration < final_clip.duration:
-                bg_audio = bg_audio.loop(duration=final_clip.duration)
+            bg_audio_full = AudioFileClip(audio_path)
+            if bg_audio_full.duration < total_dur:
+                bg_audio_full = bg_audio_full.loop(duration=total_dur)
             else:
-                bg_audio = bg_audio.subclip(0, final_clip.duration)
-            
-            if mute_original:
-                final_clip = final_clip.set_audio(bg_audio)
-            else:
-                if final_clip.audio is not None:
-                    orig_audio = final_clip.audio.volumex(0.3)
-                    bg_audio = bg_audio.volumex(0.7)
-                    mixed = CompositeAudioClip([orig_audio, bg_audio])
-                    final_clip = final_clip.set_audio(mixed)
-                else:
-                    final_clip = final_clip.set_audio(bg_audio)
+                bg_audio_full = bg_audio_full.subclip(0, total_dur)
         except Exception as e:
-            st.warning(f"Could not process background audio: {e}")
+            st.warning(f"Could not load background audio: {e}")
+            bg_audio_full = None
 
-    # ---- Text overlay ----
+    # Build final video with custom audio per segment
+    final_clips = []  # will hold (video_clip, audio_track) or video with combined audio
+
+    # We'll iterate over each segment and build its audio track
+    current_time = 0.0
+    for idx, (clip, is_video) in enumerate(zip(resized_clips, is_video_flags)):
+        seg_duration = clip.duration
+        # For this segment, we create an audio track:
+        # - If image: only background music at full volume (if bg exists)
+        # - If video: original audio at full + background at low volume (10%)
+        # The final audio track is a CompositeAudioClip or a single AudioClip.
+        audio_track = None
+        
+        if bg_audio_full is not None:
+            # Extract the corresponding segment from background audio
+            bg_seg = bg_audio_full.subclip(current_time, current_time + seg_duration)
+            # Set volume based on type
+            if is_video:
+                bg_vol = 0.1   # low background for videos (so speech is clear)
+            else:
+                bg_vol = 1.0   # full volume for images
+            bg_seg = bg_seg.volumex(bg_vol)
+        else:
+            bg_seg = None
+
+        if is_video:
+            # Original audio (if exists)
+            orig_audio = clip.audio
+            if orig_audio is not None and bg_seg is not None:
+                # Mix original (full volume) with background (low volume)
+                # We'll keep original at full volume, background at 10%
+                audio_track = CompositeAudioClip([orig_audio, bg_seg])
+            elif orig_audio is not None:
+                audio_track = orig_audio
+            elif bg_seg is not None:
+                audio_track = bg_seg
+            else:
+                audio_track = None
+        else:
+            # Image: only background music (if available)
+            if bg_seg is not None:
+                audio_track = bg_seg
+            else:
+                audio_track = None
+
+        # Set the audio to the clip
+        if audio_track is not None:
+            clip = clip.set_audio(audio_track)
+        else:
+            # No audio
+            clip = clip.set_audio(None)
+
+        final_clips.append(clip)
+        current_time += seg_duration
+
+    # Concatenate all clips (video and audio)
+    final_video = concatenate_videoclips(final_clips, method="compose")
+
+    # ---- Text and logo overlays (global) ----
     text_pil = create_text_image_for_video(
         target_w, target_h, title, subtitle, title_size, subtitle_size, color, position
     )
     text_np = np.array(text_pil)
-    text_clip = ImageClip(text_np).set_duration(final_clip.duration).set_position((0, 0))
-    overlays = [final_clip, text_clip]
+    text_clip = ImageClip(text_np).set_duration(final_video.duration).set_position((0, 0))
+    overlays = [final_video, text_clip]
 
-    # ---- Logo overlay ----
     if logo_bytes is not None:
         try:
             logo_pil = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
@@ -701,7 +751,7 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
             logo_h = int(logo_w * (logo_pil.height / logo_pil.width))
             logo_pil = logo_pil.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
             logo_np = np.array(logo_pil)
-            logo_clip = ImageClip(logo_np).set_duration(final_clip.duration)
+            logo_clip = ImageClip(logo_np).set_duration(final_video.duration)
             padding = int(target_w * 0.02)
             if logo_corner == "Top Left":
                 pos = (padding, padding)
@@ -718,15 +768,16 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
 
     final_composite = CompositeVideoClip(overlays)
 
-    # Write output
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_output:
-        output_path = tmp_output.name
-
+    # Determine FPS
     fps = first_video_fps
     for c in resized_clips:
         if hasattr(c, 'fps') and c.fps:
             fps = c.fps
             break
+
+    # Write output
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_output:
+        output_path = tmp_output.name
 
     final_composite.write_videofile(
         output_path,
@@ -748,11 +799,9 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes, mute_original,
 
 # ====== MAIN GENERATION LOGIC ======
 if generate:
-    # ----- Determine audio bytes for video/slideshow modes -----
+    # ----- Determine audio bytes (for video/slideshow) -----
     audio_bytes = None
-    mute_audio = True
     if mode in ["🎬 Upload Video", "🎬 Slideshow (Multiple Clips)"]:
-        mute_audio = mute_original_audio if 'mute_original_audio' in locals() else True
         if selected_sound != "None":
             if selected_sound == "Custom (upload your own)":
                 if custom_audio_upload:
@@ -884,6 +933,12 @@ if generate:
             st.warning("Please upload a video first.")
         else:
             with st.spinner("🎬 Processing video with overlays and audio..."):
+                # For single video, we keep the original behavior with the mute checkbox.
+                # But we removed the checkbox, so default to mixing with background low?
+                # We'll just use the same process_video_with_overlay with a default mute=False so original and background mix.
+                # We'll keep mute_original=False to mix (background low).
+                # However, the user can choose background; they can still select a preset.
+                # We'll use mute_original=False to keep original audio.
                 logo_bytes = uploaded_logo.read() if uploaded_logo else None
                 output_path = process_video_with_overlay(
                     uploaded_video,
@@ -897,7 +952,7 @@ if generate:
                     logo_corner,
                     logo_size_percent,
                     audio_bytes,
-                    mute_audio
+                    mute_original=False  # Mix original and background (background volume set inside function)
                 )
                 if output_path and os.path.exists(output_path):
                     st.success("✅ Video processed successfully!")
@@ -920,13 +975,12 @@ if generate:
         if not uploaded_files or len(uploaded_files) == 0:
             st.warning("Please upload at least one file.")
         else:
-            with st.spinner("🎬 Creating slideshow with audio..."):
+            with st.spinner("🎬 Creating slideshow with per‑clip audio..."):
                 logo_bytes = uploaded_logo.read() if uploaded_logo else None
                 output_path = create_slideshow(
                     uploaded_files,
                     image_duration,
                     audio_bytes,
-                    mute_audio,
                     overlay_title,
                     overlay_subtitle,
                     title_font_size,
