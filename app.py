@@ -7,7 +7,7 @@ import time
 import urllib.parse
 import os
 import tempfile
-import numpy as np  # Required for MoviePy + PIL image conversion
+import numpy as np
 
 # ====== PAGE CONFIG ======
 st.set_page_config(page_title="Be Like Brit Design", page_icon="🎨", layout="wide")
@@ -79,7 +79,7 @@ mode = st.radio(
 
 st.markdown("---")
 
-# ====== INPUT SECTION – CONDITIONAL BASED ON MODE ======
+# ====== INPUT SECTION ======
 uploaded_image = None
 uploaded_video = None
 prompt = ""
@@ -201,7 +201,6 @@ def get_font(size, bold=True):
     return ImageFont.load_default()
 
 def get_font_path():
-    """Returns path to a .ttf file for moviepy, or None."""
     ttf_files = [f for f in os.listdir('.') if f.lower().endswith('.ttf')]
     if ttf_files:
         return os.path.abspath(ttf_files[0])
@@ -370,12 +369,8 @@ def add_logo_overlay(img, logo_bytes, corner, size_percent):
         img.paste(logo, (x, y))
     return img
 
-# ====== VIDEO PROCESSING (FIXED – NO IMAGEMAGICK) ======
+# ====== VIDEO PROCESSING (FIXED LOGO RESIZE) ======
 def create_text_image_for_video(width, height, title, subtitle, title_size, subtitle_size, color, position):
-    """
-    Create a transparent PIL image (RGBA) with title/subtitle drawn using PIL.
-    This replicates the exact styling from the image overlay function.
-    """
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     
@@ -434,7 +429,6 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         st.error("MoviePy is not installed. Please run: pip install moviepy")
         return None
 
-    # Save uploaded video to temp file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_input:
         tmp_input.write(video_file.read())
         input_path = tmp_input.name
@@ -448,25 +442,26 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         w, h = clip.size
         clips_to_composite = [clip]
 
-        # ---- Create text overlay using PIL (no ImageMagick) ----
+        # ---- Text overlay (PIL, no ImageMagick) ----
         text_pil = create_text_image_for_video(
             w, h, title, subtitle, title_size, subtitle_size, color, position
         )
-        text_np = np.array(text_pil)          # shape (h, w, 4)
-        text_clip = ImageClip(text_np).set_duration(clip.duration)
-        text_clip = text_clip.set_position((0, 0))
+        text_np = np.array(text_pil)
+        text_clip = ImageClip(text_np).set_duration(clip.duration).set_position((0, 0))
         clips_to_composite.append(text_clip)
 
-        # ---- Add Logo (if provided) ----
+        # ---- Logo overlay (manual PIL resize to avoid ANTIALIAS) ----
         if logo_bytes is not None:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_logo:
-                tmp_logo.write(logo_bytes)
-                logo_path = tmp_logo.name
             try:
-                logo_clip = ImageClip(logo_path).set_duration(clip.duration)
+                # Read logo with PIL
+                logo_pil = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
                 logo_w = int(w * logo_size_percent)
-                logo_h = int(logo_w * (logo_clip.h / logo_clip.w))
-                logo_clip = logo_clip.resize(width=logo_w, height=logo_h)
+                logo_h = int(logo_w * (logo_pil.height / logo_pil.width))
+                # Resize using LANCZOS (replaces ANTIALIAS)
+                logo_pil = logo_pil.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
+                # Convert to numpy array for ImageClip
+                logo_np = np.array(logo_pil)
+                logo_clip = ImageClip(logo_np).set_duration(clip.duration)
                 padding = int(w * 0.02)
                 if logo_corner == "Top Left":
                     pos = (padding, padding)
@@ -476,13 +471,10 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
                     pos = (padding, h - logo_h - padding)
                 else:
                     pos = (w - logo_w - padding, h - logo_h - padding)
-                logo_clip = logo_clip.set_position(pos).set_duration(clip.duration)
+                logo_clip = logo_clip.set_position(pos)
                 clips_to_composite.append(logo_clip)
             except Exception as e:
                 st.warning(f"Could not add logo to video: {e}")
-            finally:
-                if os.path.exists(logo_path):
-                    os.unlink(logo_path)
 
         if len(clips_to_composite) == 1:
             st.warning("No title, subtitle, or logo to overlay. Returning original video.")
