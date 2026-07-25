@@ -74,7 +74,7 @@ mode = st.radio(
     "Choose your design source:",
     ["🎨 AI Generation (Text)", "🖼️ Upload Image", "🎬 Upload Video", "🎬 Slideshow (Multiple Clips)", "📄 Flyer Creator", "⬜ Blank Sheet", "🟦 Color Sheet"],
     horizontal=True,
-    index=5  # Blank Sheet default
+    index=5
 )
 
 st.markdown("---")
@@ -190,7 +190,6 @@ elif mode in ["⬜ Blank Sheet", "🟦 Color Sheet"]:
         color_sheet_bg = st.color_picker("Pick a background color", value="#FF6600", key="color_sheet_bg")
         st.caption(f"💡 Selected color: {color_sheet_bg}")
     
-    # Additional text lines (services)
     st.markdown("---")
     st.markdown("### 📝 Additional text lines (e.g., services)")
     service_lines_input = st.text_area(
@@ -222,7 +221,7 @@ with col2:
 
 st.markdown("---")
 
-# ====== LOGO OVERLAY (optional – leave empty for clean sheet) ======
+# ====== LOGO OVERLAY ======
 st.markdown("### 🖼️ Logo Overlay (Optional)")
 st.caption("Upload a logo or image to place in a corner. PNG with transparency works best. **Leave empty for a clean sheet with only text.**")
 col_logo1, col_logo2 = st.columns(2)
@@ -434,17 +433,23 @@ def generate_image(prompt, width, height, style):
     return create_fallback_image(prompt, width, height)
 
 def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, position):
+    """
+    Draws title and subtitle on the image.
+    Returns: (img, y_after_subtitle) where y_after_subtitle is the Y coordinate right after the subtitle.
+    """
     img = img.copy()
     w, h = img.size
     draw = ImageDraw.Draw(img)
     title_font = get_font(title_size, bold=True)
     subtitle_font = get_font(subtitle_size, bold=True)
+    
     if position == "Top":
         y_start = int(h * 0.08)
     elif position == "Bottom":
         y_start = int(h * 0.70)
     else:
         y_start = int(h * 0.28)
+    
     temp = Image.new('RGB', (1,1))
     temp_draw = ImageDraw.Draw(temp)
     title_bbox = temp_draw.textbbox((0,0), title, font=title_font) if title else (0,0,0,0)
@@ -453,8 +458,10 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
     title_h = title_bbox[3] - title_bbox[1] if title else 0
     sub_w = subtitle_bbox[2] - subtitle_bbox[0] if subtitle else 0
     sub_h = subtitle_bbox[3] - subtitle_bbox[1] if subtitle else 0
+    
     y = y_start
     if title:
+        # Shadow/glow effects
         for offset in range(10, 0, -2):
             alpha = int(30 * (offset/10))
             glow_color = (255,255,255, alpha)
@@ -465,6 +472,7 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
                     draw.text((w//2 - title_w//2 + dx, y+dy), title, font=title_font, fill='black')
         draw.text((w//2 - title_w//2, y), title, font=title_font, fill=color)
         y += title_h + 25
+    
     if subtitle:
         for offset in range(6, 0, -2):
             alpha = int(20 * (offset/6))
@@ -475,7 +483,12 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
                 if dx != 0 or dy != 0:
                     draw.text((w//2 - sub_w//2 + dx, y+dy), subtitle, font=subtitle_font, fill='black')
         draw.text((w//2 - sub_w//2, y), subtitle, font=subtitle_font, fill=color)
-    return img
+        y += sub_h + 25
+    else:
+        # If no subtitle, add a small padding after title
+        y += 10  # minimal gap
+    
+    return img, y
 
 def add_service_lines(img, lines, font_size, line_spacing, color, start_y, bullets=True):
     """
@@ -497,7 +510,6 @@ def add_service_lines(img, lines, font_size, line_spacing, color, start_y, bulle
         if bullets:
             # Draw bullet
             draw.ellipse((bullet_x - bullet_radius, y - bullet_radius, bullet_x + bullet_radius, y + bullet_radius), fill=bullet_color)
-            # Draw text with slight offset
             draw.text((margin, y - font_size//2), line.strip(), font=font, fill=color)
         else:
             draw.text((margin, y - font_size//2), line.strip(), font=font, fill=color)
@@ -941,7 +953,7 @@ if generate:
                 img = generate_image(prompt, width, height, style)
                 if img:
                     if overlay_title or overlay_subtitle:
-                        img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
+                        img, _ = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
                     img = add_logo_overlay(img, uploaded_logo.read() if uploaded_logo else None, logo_corner, logo_size_percent)
                     st.markdown("### ✨ Generated Design")
                     col_display, col_info = st.columns([2, 1])
@@ -995,7 +1007,7 @@ if generate:
                 img = Image.open(uploaded_image)
                 img = img.resize((width, height), Image.Resampling.LANCZOS)
                 if overlay_title or overlay_subtitle:
-                    img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
+                    img, _ = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
                 img = add_logo_overlay(img, uploaded_logo.read() if uploaded_logo else None, logo_corner, logo_size_percent)
                 st.markdown("### ✨ Designed Image")
                 col_display, col_info = st.columns([2, 1])
@@ -1171,27 +1183,19 @@ if generate:
     elif mode == "⬜ Blank Sheet":
         with st.spinner("⬜ Generating blank white sheet with your text..."):
             img = Image.new('RGB', (width, height), color='white')
+            y_after_text = 0
             if overlay_title or overlay_subtitle:
-                img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
-            # Add service lines if any
+                img, y_after_text = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
+            else:
+                # If no title/subtitle, start services from top with some padding
+                y_after_text = int(height * 0.08)
+            
+            # Add service lines with a small gap (30px) after subtitle
             service_lines = [line for line in service_lines_input.split('\n') if line.strip()]
             if service_lines:
-                # Determine start Y after title/subtitle
-                # We need to know where the subtitle ends. We can approximate:
-                # After add_text_overlay, we could compute the final Y position, but we can simply place it at 60% of height if no title/subtitle, or below.
-                # Simpler: use a fixed offset based on position.
-                # For now, we'll set start_y = 0.45 * height (middle-ish) if no title, else after subtitle.
-                # We'll use a heuristic: if subtitle exists, start after it; else after title; else at 0.4*height.
-                # We'll use the same y_start logic as in add_text_overlay, but we need to know the actual Y after drawing.
-                # Let's compute it similarly:
-                # Recompute the starting y for title/subtitle to know where the last text ends.
-                # We'll just call add_text_overlay first and then measure the height.
-                # But we can simply set a fixed start_y at 0.45 * height for the list, it will be safe.
-                start_y = int(height * 0.45)
-                # If title or subtitle, we can shift down a bit
-                if overlay_title or overlay_subtitle:
-                    start_y = int(height * 0.50)
+                start_y = y_after_text + 30  # small gap
                 img = add_service_lines(img, service_lines, service_font_size, service_line_spacing, text_color, start_y, bullets=service_bullets)
+            
             if uploaded_logo is not None:
                 img = add_logo_overlay(img, uploaded_logo.read(), logo_corner, logo_size_percent)
 
@@ -1240,15 +1244,17 @@ if generate:
     elif mode == "🟦 Color Sheet":
         with st.spinner("🟦 Generating your custom color sheet with text..."):
             img = Image.new('RGB', (width, height), color=color_sheet_bg)
+            y_after_text = 0
             if overlay_title or overlay_subtitle:
-                img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
-            # Add service lines
+                img, y_after_text = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
+            else:
+                y_after_text = int(height * 0.08)
+            
             service_lines = [line for line in service_lines_input.split('\n') if line.strip()]
             if service_lines:
-                start_y = int(height * 0.45)
-                if overlay_title or overlay_subtitle:
-                    start_y = int(height * 0.50)
+                start_y = y_after_text + 30
                 img = add_service_lines(img, service_lines, service_font_size, service_line_spacing, text_color, start_y, bullets=service_bullets)
+            
             if uploaded_logo is not None:
                 img = add_logo_overlay(img, uploaded_logo.read(), logo_corner, logo_size_percent)
 
