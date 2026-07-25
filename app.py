@@ -69,12 +69,12 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ====== MODE SELECTION – Blank Sheet is now default (index=5) ======
+# ====== MODE SELECTION – added "🟦 Color Sheet" after Blank Sheet ======
 mode = st.radio(
     "Choose your design source:",
-    ["🎨 AI Generation (Text)", "🖼️ Upload Image", "🎬 Upload Video", "🎬 Slideshow (Multiple Clips)", "📄 Flyer Creator", "⬜ Blank Sheet"],
+    ["🎨 AI Generation (Text)", "🖼️ Upload Image", "🎬 Upload Video", "🎬 Slideshow (Multiple Clips)", "📄 Flyer Creator", "⬜ Blank Sheet", "🟦 Color Sheet"],
     horizontal=True,
-    index=5  # <-- Blank Sheet is the default
+    index=5  # <-- Blank Sheet is the default (index 5)
 )
 
 st.markdown("---")
@@ -92,6 +92,7 @@ Flyers et Affiches
 Bâches et Enseignes
 Marquage sur Verrerie et Métal
 Impressions Grand Format"""
+color_sheet_bg = "#FFFFFF"  # default white
 
 if mode == "🎨 AI Generation (Text)":
     st.markdown("Describe your dream design – I'll bring it to life.")
@@ -179,7 +180,12 @@ elif mode == "⬜ Blank Sheet":
     st.markdown("### ⬜ Generate a blank white sheet with your text")
     st.success("✅ This mode creates a **solid white background** with **only your title and subtitle** – no extra graphics, no AI, no logo unless you upload one.")
     st.caption("💡 Enter your title and subtitle below, choose font size/color/position, and click **Generate**.")
-    # No extra inputs needed – text overlay fields are below.
+
+elif mode == "🟦 Color Sheet":
+    st.markdown("### 🟦 Generate a solid color sheet with your text")
+    st.success("✅ Choose any background color, and we'll add your title/subtitle and optional logo.")
+    color_sheet_bg = st.color_picker("Pick a background color", value="#FF6600", key="color_sheet_bg")
+    st.caption(f"💡 Selected color: {color_sheet_bg}")
 
 st.markdown("---")
 
@@ -199,7 +205,7 @@ st.markdown("---")
 
 # ====== LOGO OVERLAY (optional – leave empty for blank sheet) ======
 st.markdown("### 🖼️ Logo Overlay (Optional)")
-st.caption("Upload a logo or image to place in a corner. PNG with transparency works best. **Leave empty for a clean white sheet with only text.**")
+st.caption("Upload a logo or image to place in a corner. PNG with transparency works best. **Leave empty for a clean sheet with only text.**")
 col_logo1, col_logo2 = st.columns(2)
 with col_logo1:
     uploaded_logo = st.file_uploader(
@@ -1080,7 +1086,7 @@ if generate:
                 else:
                     st.error("Slideshow creation failed. Please check the logs.")
 
-    # ----- Flyer Creator (UPDATED) -----
+    # ----- Flyer Creator -----
     elif mode == "📄 Flyer Creator":
         with st.spinner("📄 Generating your professional flyer..."):
             services = [s.strip() for s in flyer_services.split('\n') if s.strip()]
@@ -1181,6 +1187,60 @@ if generate:
                 "image": img,
                 "timestamp": time.time(),
                 "style": "Blank",
+                "width": width,
+                "height": height
+            })
+            if len(st.session_state.history) > 20:
+                st.session_state.history = st.session_state.history[-20:]
+
+    # ----- NEW: Color Sheet -----
+    elif mode == "🟦 Color Sheet":
+        with st.spinner("🟦 Generating your custom color sheet with text..."):
+            # Create solid image with chosen color
+            img = Image.new('RGB', (width, height), color=color_sheet_bg)
+            # Apply text overlay (title/subtitle)
+            if overlay_title or overlay_subtitle:
+                img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
+            # Optionally add logo if uploaded
+            if uploaded_logo is not None:
+                img = add_logo_overlay(img, uploaded_logo.read(), logo_corner, logo_size_percent)
+
+            st.markdown("### 🟦 Your Color Sheet")
+            col_display, col_info = st.columns([2, 1])
+            with col_display:
+                st.image(img, use_column_width=True)
+            with col_info:
+                st.markdown(f"**Size:** {width}×{height}")
+                st.markdown(f"**Background color:** {color_sheet_bg}")
+                st.markdown("---")
+                st.markdown("### 💾 Download Options")
+                bg_option = st.selectbox("Choose background sheet color", ["White", "Black", "Custom"], index=0, key="bg_color")
+                if bg_option == "Custom":
+                    custom_color = st.color_picker("Pick a color", "#FFFFFF", key="cp_color")
+                    bg_color = custom_color
+                elif bg_option == "White":
+                    bg_color = "#FFFFFF"
+                else:
+                    bg_color = "#000000"
+                output_size = (max(width, height) + 200, max(width, height) + 200)
+                bg_img = add_background(img, bg_color, output_size)
+                buf = io.BytesIO()
+                bg_img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+                st.download_button(
+                    label="⬇️ Download Color Sheet",
+                    data=byte_im,
+                    file_name=f"color_sheet_{int(time.time())}.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
+            if "history" not in st.session_state:
+                st.session_state.history = []
+            st.session_state.history.append({
+                "prompt": f"Color Sheet {width}x{height} ({color_sheet_bg})",
+                "image": img,
+                "timestamp": time.time(),
+                "style": "ColorSheet",
                 "width": width,
                 "height": height
             })
