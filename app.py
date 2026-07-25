@@ -488,7 +488,7 @@ def add_logo_overlay(img, logo_bytes, corner, size_percent):
         img.paste(logo, (x, y))
     return img
 
-# ====== VIDEO HELPERS (unchanged) ======
+# ====== VIDEO HELPERS ======
 def create_text_image_for_video(width, height, title, subtitle, title_size, subtitle_size, color, position):
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -640,7 +640,7 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         if os.path.exists(input_path):
             os.unlink(input_path)
 
-# ====== SLIDESHOW (unchanged) ======
+# ====== SLIDESHOW ======
 def resize_clip_with_pil(clip, target_w, target_h):
     def resize_frame(frame):
         pil_img = Image.fromarray(frame)
@@ -814,7 +814,7 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
                 pass
     return output_path
 
-# ====== FLYER GENERATOR (FIXED: now properly centers all header texts) ======
+# ====== FLYER GENERATOR (FIXED – PERFECT CENTERING) ======
 def generate_flyer(company_name, subtitle, services_list, canvas_width, canvas_height):
     img = Image.new('RGB', (canvas_width, canvas_height), color='white')
     draw = ImageDraw.Draw(img)
@@ -834,25 +834,25 @@ def generate_flyer(company_name, subtitle, services_list, canvas_width, canvas_h
         font_small = ImageFont.load_default()
         font_service = ImageFont.load_default()
 
-    # Helper to draw centered text with a shadow
-    def draw_centered_text(text, y, font, fill_color, shadow_color='black', shadow_offset=4):
-        # Get text bounding box
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
+    # Helper to draw perfectly centered text
+    def draw_centered(text, y, font, color, shadow=True):
+        # Get text width using textlength
+        text_width = draw.textlength(text, font=font)
         x = (canvas_width - text_width) // 2
-        # Shadow
-        draw.text((x + shadow_offset, y + shadow_offset), text, font=font, fill=shadow_color)
-        # Main text
-        draw.text((x, y), text, font=font, fill=fill_color)
+        if shadow:
+            # Draw shadow
+            draw.text((x + 4, y + 4), text, font=font, fill='black')
+        # Draw main text
+        draw.text((x, y), text, font=font, fill=color)
 
-    # ---- Company name (logo) ----
-    draw_centered_text(company_name, 60, font_large, orange)
+    # ---- Company name (logo) with shadow ----
+    draw_centered(company_name, 60, font_large, orange, shadow=True)
 
-    # ---- "SERIGRAPHIE" header ----
-    draw_centered_text("SERIGRAPHIE", 180, font_medium, orange)
+    # ---- "SERIGRAPHIE" header (no shadow, just orange) ----
+    draw_centered("SERIGRAPHIE", 180, font_medium, orange, shadow=False)
 
     # ---- Subtitle ----
-    draw_centered_text(subtitle, 270, font_small, dark_gray)
+    draw_centered(subtitle, 270, font_small, dark_gray, shadow=False)
 
     # ---- Separator line ----
     line_y = 330
@@ -869,13 +869,13 @@ def generate_flyer(company_name, subtitle, services_list, canvas_width, canvas_h
         bullet_radius = 8
         bullet_x = canvas_width // 4 - 30
         draw.ellipse((bullet_x - bullet_radius, y - bullet_radius, bullet_x + bullet_radius, y + bullet_radius), fill=orange)
-        # Service text (left aligned after bullet)
+        # Service text (left aligned)
         draw.text((canvas_width//4 + 10, y - 15), service.strip(), font=font_service, fill=black)
 
-    # ---- Footer ----
+    # ---- Footer (centered) ----
     footer_y = canvas_height - 60
     footer_text = "Contact: (509) 4738-5663 | deslandes78@gmail.com"
-    draw_centered_text(footer_text, footer_y, font_service, dark_gray)
+    draw_centered(footer_text, footer_y, font_service, dark_gray, shadow=False)
 
     return img
 
