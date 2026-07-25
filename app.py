@@ -194,8 +194,8 @@ elif mode in ["⬜ Blank Sheet", "🟦 Color Sheet"]:
     st.markdown("### 📝 Additional text lines (e.g., services)")
     service_lines_input = st.text_area(
         "Enter each line (one per line)",
-        value="Impression sur T-shirts et Polo\nPersonnalisation de Sacs et Casquettes\nFlyers et Affiches\nBâches et Enseignes\nMarquage sur Verrerie et Métal\nImpressions Grand Format",
-        height=200,
+        value="Impression sur T-shirts et Polo\nPersonnalisation de Sacs et Casquettes\nFlyers et Affiches\nBâches et Enseignes\nMarquage sur Verrerie et Métal\nImpressions Grand Format\nAutocollants et Étiquettes\nSignalétique et Panneaux\nGoodies et Accessoires Promotionnels\nMarquage sur Bois et Cuir",
+        height=250,
         key="service_lines"
     )
     col1, col2 = st.columns(2)
@@ -1187,13 +1187,11 @@ if generate:
             if overlay_title or overlay_subtitle:
                 img, y_after_text = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
             else:
-                # If no title/subtitle, start services from top with some padding
                 y_after_text = int(height * 0.08)
             
-            # Add service lines with a small gap (30px) after subtitle
             service_lines = [line for line in service_lines_input.split('\n') if line.strip()]
             if service_lines:
-                start_y = y_after_text + 30  # small gap
+                start_y = y_after_text + 30
                 img = add_service_lines(img, service_lines, service_font_size, service_line_spacing, text_color, start_y, bullets=service_bullets)
             
             if uploaded_logo is not None:
