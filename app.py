@@ -814,13 +814,15 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
                 pass
     return output_path
 
-# ====== FLYER GENERATOR (unchanged) ======
+# ====== FLYER GENERATOR (FIXED: now properly centers all header texts) ======
 def generate_flyer(company_name, subtitle, services_list, canvas_width, canvas_height):
     img = Image.new('RGB', (canvas_width, canvas_height), color='white')
     draw = ImageDraw.Draw(img)
     orange = "#FF6600"
     black = "#000000"
     dark_gray = "#333333"
+    
+    # Load fonts
     try:
         font_large = get_font(100, bold=True)
         font_medium = get_font(60, bold=True)
@@ -831,26 +833,50 @@ def generate_flyer(company_name, subtitle, services_list, canvas_width, canvas_h
         font_medium = ImageFont.load_default()
         font_small = ImageFont.load_default()
         font_service = ImageFont.load_default()
-    center_x = canvas_width // 2
-    shadow_offset = 4
-    draw.text((center_x - shadow_offset, 60 - shadow_offset), company_name, font=font_large, fill='black')
-    draw.text((center_x, 60), company_name, font=font_large, fill=orange)
-    draw.text((center_x, 180), "SERIGRAPHIE", font=font_medium, fill=orange)
-    draw.text((center_x, 270), subtitle, font=font_small, fill=dark_gray)
+
+    # Helper to draw centered text with a shadow
+    def draw_centered_text(text, y, font, fill_color, shadow_color='black', shadow_offset=4):
+        # Get text bounding box
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = bbox[2] - bbox[0]
+        x = (canvas_width - text_width) // 2
+        # Shadow
+        draw.text((x + shadow_offset, y + shadow_offset), text, font=font, fill=shadow_color)
+        # Main text
+        draw.text((x, y), text, font=font, fill=fill_color)
+
+    # ---- Company name (logo) ----
+    draw_centered_text(company_name, 60, font_large, orange)
+
+    # ---- "SERIGRAPHIE" header ----
+    draw_centered_text("SERIGRAPHIE", 180, font_medium, orange)
+
+    # ---- Subtitle ----
+    draw_centered_text(subtitle, 270, font_small, dark_gray)
+
+    # ---- Separator line ----
     line_y = 330
     draw.line((canvas_width//4, line_y, canvas_width*3//4, line_y), fill=orange, width=3)
+
+    # ---- Services list (left-aligned with bullets) ----
     service_start_y = 380
     line_spacing = 55
     for i, service in enumerate(services_list):
         if not service.strip():
             continue
         y = service_start_y + i * line_spacing
+        # Bullet
         bullet_radius = 8
         bullet_x = canvas_width // 4 - 30
         draw.ellipse((bullet_x - bullet_radius, y - bullet_radius, bullet_x + bullet_radius, y + bullet_radius), fill=orange)
+        # Service text (left aligned after bullet)
         draw.text((canvas_width//4 + 10, y - 15), service.strip(), font=font_service, fill=black)
+
+    # ---- Footer ----
     footer_y = canvas_height - 60
-    draw.text((center_x, footer_y), "Contact: (509) 4738-5663 | deslandes78@gmail.com", font=font_service, fill=dark_gray)
+    footer_text = "Contact: (509) 4738-5663 | deslandes78@gmail.com"
+    draw_centered_text(footer_text, footer_y, font_service, dark_gray)
+
     return img
 
 # ====== MAIN GENERATION LOGIC ======
@@ -1054,9 +1080,9 @@ if generate:
                 else:
                     st.error("Slideshow creation failed. Please check the logs.")
 
-    # ----- Flyer Creator -----
+    # ----- Flyer Creator (UPDATED) -----
     elif mode == "📄 Flyer Creator":
-        with st.spinner("📄 Generating your flyer..."):
+        with st.spinner("📄 Generating your professional flyer..."):
             services = [s.strip() for s in flyer_services.split('\n') if s.strip()]
             img = generate_flyer(
                 company_name=flyer_company,
