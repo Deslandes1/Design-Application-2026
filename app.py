@@ -95,6 +95,7 @@ Impressions Grand Format"""
 
 if mode == "🎨 AI Generation (Text)":
     st.markdown("Describe your dream design – I'll bring it to life.")
+    st.caption("💡 For long text (like flyer details), please use the **📄 Flyer Creator** mode for best results. This AI mode works best with short, descriptive prompts (under 450 characters).")
     presets = [
         "Futuristic cityscape at sunset, neon lights, cyberpunk style",
         "Minimalist logo for a tech startup, geometric, blue and gold",
@@ -115,6 +116,13 @@ if mode == "🎨 AI Generation (Text)":
         value=st.session_state.get("prompt", ""),
         key="prompt_input"
     )
+    # Show character count warning
+    if prompt:
+        char_count = len(prompt)
+        if char_count > 450:
+            st.warning(f"⚠️ Your prompt is {char_count} characters. It will be automatically shortened to ~450 characters to avoid API errors.")
+        else:
+            st.info(f"📝 {char_count} characters (safe limit: 450)")
 
 elif mode == "🖼️ Upload Image":
     st.markdown("Upload an image, and we'll add your title/subtitle overlay to it.")
@@ -153,6 +161,7 @@ elif mode == "🎬 Slideshow (Multiple Clips)":
 
 elif mode == "📄 Flyer Creator":
     st.markdown("### 🖨️ Create a professional flyer")
+    st.success("💡 This mode generates flyers **without any API calls** – ideal for structured designs like flyers, posters, and business cards.")
     flyer_company = st.text_input("Company / Logo name", value="MisNova", key="flyer_company")
     flyer_subtitle = st.text_input("Subtitle", value="Personalisation de Qualité", key="flyer_subtitle")
     flyer_services = st.text_area(
@@ -166,7 +175,6 @@ Impressions Grand Format""",
         height=200,
         key="flyer_services"
     )
-    st.info("The flyer will be generated directly with PIL – no API call, no errors.")
 
 st.markdown("---")
 
@@ -295,6 +303,18 @@ def enhance_prompt(prompt):
         prompt = f"{prompt}, {quality_keywords}"
     return prompt
 
+def truncate_prompt(prompt, max_length=450):
+    """
+    Clean and truncate prompt to safe length for API calls.
+    Removes newlines and truncates to max_length characters.
+    """
+    # Replace newlines and multiple spaces with single space
+    cleaned = ' '.join(prompt.split())
+    if len(cleaned) > max_length:
+        # Truncate to max_length and add ellipsis
+        cleaned = cleaned[:max_length] + "..."
+    return cleaned
+
 def create_placeholder_image(width, height):
     img = Image.new('RGB', (width, height))
     draw = ImageDraw.Draw(img)
@@ -346,6 +366,11 @@ def create_fallback_image(prompt, width, height):
     return img
 
 def generate_image(prompt, width, height, style):
+    # First, clean and truncate the prompt
+    cleaned_prompt = truncate_prompt(prompt, max_length=450)
+    if len(cleaned_prompt) != len(prompt):
+        st.info(f"✂️ Prompt shortened from {len(prompt)} to {len(cleaned_prompt)} characters for API compatibility.")
+
     style_map = {
         "Cinematic": "cinematic",
         "Anime": "anime",
@@ -355,7 +380,7 @@ def generate_image(prompt, width, height, style):
         "3D Render": "3d+render",
     }
     style_param = style_map.get(style, "")
-    enhanced_prompt = enhance_prompt(prompt)
+    enhanced_prompt = enhance_prompt(cleaned_prompt)
     if style_param:
         enhanced_prompt = f"{enhanced_prompt}, {style_param} style"
     encoded = urllib.parse.quote(enhanced_prompt)
@@ -370,7 +395,7 @@ def generate_image(prompt, width, height, style):
             try:
                 response = requests.get(url, timeout=60)
                 if response.status_code != 200:
-                    st.warning(f"Attempt {attempt+1}: Status {response.status_code} from {url}. Retrying...")
+                    st.warning(f"Attempt {attempt+1}: Status {response.status_code}. Retrying...")
                     time.sleep(2)
                     continue
                 
@@ -947,7 +972,7 @@ if generate:
                     with col_display:
                         st.image(img, use_column_width=True)
                     with col_info:
-                        st.markdown(f"**Prompt:** {prompt}")
+                        st.markdown(f"**Prompt:** {prompt[:200]}{'...' if len(prompt)>200 else ''}")
                         st.markdown(f"**Size:** {width}×{height}")
                         st.markdown(f"**Style:** {style if style != 'No style' else 'None'}")
                         st.markdown("---")
