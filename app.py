@@ -69,10 +69,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ====== MODE SELECTION ======
+# ====== MODE SELECTION (UPDATED: added Flyer) ======
 mode = st.radio(
     "Choose your design source:",
-    ["🎨 AI Generation (Text)", "🖼️ Upload Image", "🎬 Upload Video", "🎬 Slideshow (Multiple Clips)"],
+    ["🎨 AI Generation (Text)", "🖼️ Upload Image", "🎬 Upload Video", "🎬 Slideshow (Multiple Clips)", "📄 Flyer Creator"],
     horizontal=True,
     index=0
 )
@@ -84,6 +84,14 @@ uploaded_image = None
 uploaded_video = None
 uploaded_files = None
 prompt = ""
+flyer_company = "MisNova"
+flyer_subtitle = "Personalisation de Qualité"
+flyer_services = """Impression sur T-shirts et Polo
+Personnalisation de Sacs et Casquettes
+Flyers et Affiches
+Bâches et Enseignes
+Marquage sur Verrerie et Métal
+Impressions Grand Format"""
 
 if mode == "🎨 AI Generation (Text)":
     st.markdown("Describe your dream design – I'll bring it to life.")
@@ -143,9 +151,26 @@ elif mode == "🎬 Slideshow (Multiple Clips)":
         for f in uploaded_files:
             st.caption(f"• {f.name} ({f.size // 1024} KB)")
 
+elif mode == "📄 Flyer Creator":
+    st.markdown("### 🖨️ Create a professional flyer")
+    flyer_company = st.text_input("Company / Logo name", value="MisNova", key="flyer_company")
+    flyer_subtitle = st.text_input("Subtitle", value="Personalisation de Qualité", key="flyer_subtitle")
+    flyer_services = st.text_area(
+        "Services (one per line)",
+        value="""Impression sur T-shirts et Polo
+Personnalisation de Sacs et Casquettes
+Flyers et Affiches
+Bâches et Enseignes
+Marquage sur Verrerie et Métal
+Impressions Grand Format""",
+        height=200,
+        key="flyer_services"
+    )
+    st.info("The flyer will be generated directly with PIL – no API call, no errors.")
+
 st.markdown("---")
 
-# ====== TEXT OVERLAY ======
+# ====== TEXT OVERLAY (shared for image/video modes) ======
 st.markdown("### ✏️ Text Overlay (professional & colourful)")
 col1, col2 = st.columns(2)
 with col1:
@@ -802,6 +827,74 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
 
     return output_path
 
+# ====== NEW: FLYER GENERATOR (PIL only) ======
+def generate_flyer(company_name, subtitle, services_list, canvas_width, canvas_height):
+    """
+    Generate a professional flyer using PIL.
+    """
+    # Create white background
+    img = Image.new('RGB', (canvas_width, canvas_height), color='white')
+    draw = ImageDraw.Draw(img)
+
+    # Colors
+    orange = "#FF6600"
+    black = "#000000"
+    dark_gray = "#333333"
+
+    # Fonts (try to get large fonts)
+    try:
+        # Try to load a bold sans-serif font
+        font_large = get_font(100, bold=True)
+        font_medium = get_font(60, bold=True)
+        font_small = get_font(40, bold=True)
+        font_service = get_font(35, bold=False)
+    except:
+        # Fallback to default
+        font_large = ImageFont.load_default()
+        font_medium = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+        font_service = ImageFont.load_default()
+
+    # Center X
+    center_x = canvas_width // 2
+
+    # ---- LOGO "MisNova" (company name) ----
+    # Shadow
+    shadow_offset = 4
+    draw.text((center_x - shadow_offset, 60 - shadow_offset), company_name, font=font_large, fill='black')
+    # Main text in orange
+    draw.text((center_x, 60), company_name, font=font_large, fill=orange)
+
+    # ---- Header "SERIGRAPHIE" ----
+    draw.text((center_x, 180), "SERIGRAPHIE", font=font_medium, fill=orange)
+
+    # ---- Subtitle ----
+    draw.text((center_x, 270), subtitle, font=font_small, fill=dark_gray)
+
+    # ---- Separator line ----
+    line_y = 330
+    draw.line((canvas_width//4, line_y, canvas_width*3//4, line_y), fill=orange, width=3)
+
+    # ---- Services list with orange bullets ----
+    service_start_y = 380
+    line_spacing = 55
+    for i, service in enumerate(services_list):
+        if not service.strip():
+            continue
+        y = service_start_y + i * line_spacing
+        # Bullet point (orange circle)
+        bullet_radius = 8
+        bullet_x = canvas_width // 4 - 30
+        draw.ellipse((bullet_x - bullet_radius, y - bullet_radius, bullet_x + bullet_radius, y + bullet_radius), fill=orange)
+        # Service text (left-aligned)
+        draw.text((canvas_width//4 + 10, y - 15), service.strip(), font=font_service, fill=black)
+
+    # ---- Footer (optional) ----
+    footer_y = canvas_height - 60
+    draw.text((center_x, footer_y), "Contact: (509) 4738-5663 | deslandes78@gmail.com", font=font_service, fill=dark_gray)
+
+    return img
+
 # ====== MAIN GENERATION LOGIC ======
 if generate:
     audio_bytes = None
@@ -1004,6 +1097,66 @@ if generate:
                     os.unlink(output_path)
                 else:
                     st.error("Slideshow creation failed. Please check the logs.")
+
+    # ----- NEW: Flyer Creator -----
+    elif mode == "📄 Flyer Creator":
+        with st.spinner("📄 Generating your flyer..."):
+            # Parse services list
+            services = [s.strip() for s in flyer_services.split('\n') if s.strip()]
+            img = generate_flyer(
+                company_name=flyer_company,
+                subtitle=flyer_subtitle,
+                services_list=services,
+                canvas_width=width,
+                canvas_height=height
+            )
+            # Optionally add logo overlay if uploaded (but flyer already has its own logo)
+            # We'll respect the logo overlay if uploaded, but the flyer has its own design; we could skip.
+            # I'll allow it for flexibility.
+            if uploaded_logo is not None:
+                img = add_logo_overlay(img, uploaded_logo.read(), logo_corner, logo_size_percent)
+
+            st.markdown("### 📄 Your Professional Flyer")
+            col_display, col_info = st.columns([2, 1])
+            with col_display:
+                st.image(img, use_column_width=True)
+            with col_info:
+                st.markdown(f"**Size:** {width}×{height}")
+                st.markdown("---")
+                st.markdown("### 💾 Download Options")
+                bg_option = st.selectbox("Choose background sheet color", ["White", "Black", "Custom"], index=0, key="bg_flyer")
+                if bg_option == "Custom":
+                    custom_color = st.color_picker("Pick a color", "#FFFFFF", key="cp_flyer")
+                    bg_color = custom_color
+                elif bg_option == "White":
+                    bg_color = "#FFFFFF"
+                else:
+                    bg_color = "#000000"
+                output_size = (max(width, height) + 200, max(width, height) + 200)
+                bg_img = add_background(img, bg_color, output_size)
+                buf = io.BytesIO()
+                bg_img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+                st.download_button(
+                    label="⬇️ Download Flyer with Sheet",
+                    data=byte_im,
+                    file_name=f"flyer_{int(time.time())}.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
+            # Save to history
+            if "history" not in st.session_state:
+                st.session_state.history = []
+            st.session_state.history.append({
+                "prompt": f"Flyer: {flyer_company}",
+                "image": img,
+                "timestamp": time.time(),
+                "style": "Flyer",
+                "width": width,
+                "height": height
+            })
+            if len(st.session_state.history) > 20:
+                st.session_state.history = st.session_state.history[-20:]
 
 # ====== HISTORY ======
 if "history" in st.session_state and st.session_state.history:
