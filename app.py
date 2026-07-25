@@ -69,10 +69,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ====== MODE SELECTION ======
+# ====== MODE SELECTION (ADDED BLANK SHEET) ======
 mode = st.radio(
     "Choose your design source:",
-    ["🎨 AI Generation (Text)", "🖼️ Upload Image", "🎬 Upload Video", "🎬 Slideshow (Multiple Clips)", "📄 Flyer Creator"],
+    ["🎨 AI Generation (Text)", "🖼️ Upload Image", "🎬 Upload Video", "🎬 Slideshow (Multiple Clips)", "📄 Flyer Creator", "⬜ Blank Sheet"],
     horizontal=True,
     index=0
 )
@@ -175,6 +175,11 @@ Impressions Grand Format""",
         height=200,
         key="flyer_services"
     )
+
+elif mode == "⬜ Blank Sheet":
+    st.markdown("### ⬜ Generate a blank white sheet")
+    st.info("This mode creates a solid white canvas of the selected width and height. You can optionally add text and logo overlays below.")
+    st.caption("💡 Use this to create a clean background for further editing or printing.")
 
 st.markdown("---")
 
@@ -1187,6 +1192,59 @@ if generate:
                 "image": img,
                 "timestamp": time.time(),
                 "style": "Flyer",
+                "width": width,
+                "height": height
+            })
+            if len(st.session_state.history) > 20:
+                st.session_state.history = st.session_state.history[-20:]
+
+    # ----- NEW: Blank Sheet -----
+    elif mode == "⬜ Blank Sheet":
+        with st.spinner("⬜ Generating blank white sheet..."):
+            # Create solid white image
+            img = Image.new('RGB', (width, height), color='white')
+            # Apply text overlay if user provided text
+            if overlay_title or overlay_subtitle:
+                img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
+            # Apply logo if uploaded
+            if uploaded_logo is not None:
+                img = add_logo_overlay(img, uploaded_logo.read(), logo_corner, logo_size_percent)
+
+            st.markdown("### ⬜ Blank Sheet")
+            col_display, col_info = st.columns([2, 1])
+            with col_display:
+                st.image(img, use_column_width=True)
+            with col_info:
+                st.markdown(f"**Size:** {width}×{height}")
+                st.markdown("---")
+                st.markdown("### 💾 Download Options")
+                bg_option = st.selectbox("Choose background sheet color", ["White", "Black", "Custom"], index=0, key="bg_blank")
+                if bg_option == "Custom":
+                    custom_color = st.color_picker("Pick a color", "#FFFFFF", key="cp_blank")
+                    bg_color = custom_color
+                elif bg_option == "White":
+                    bg_color = "#FFFFFF"
+                else:
+                    bg_color = "#000000"
+                output_size = (max(width, height) + 200, max(width, height) + 200)
+                bg_img = add_background(img, bg_color, output_size)
+                buf = io.BytesIO()
+                bg_img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+                st.download_button(
+                    label="⬇️ Download Blank Sheet",
+                    data=byte_im,
+                    file_name=f"blank_{int(time.time())}.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
+            if "history" not in st.session_state:
+                st.session_state.history = []
+            st.session_state.history.append({
+                "prompt": f"Blank Sheet {width}x{height}",
+                "image": img,
+                "timestamp": time.time(),
+                "style": "Blank",
                 "width": width,
                 "height": height
             })
