@@ -69,12 +69,12 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ====== MODE SELECTION (ADDED BLANK SHEET) ======
+# ====== MODE SELECTION – Blank Sheet is now default (index=5) ======
 mode = st.radio(
     "Choose your design source:",
     ["🎨 AI Generation (Text)", "🖼️ Upload Image", "🎬 Upload Video", "🎬 Slideshow (Multiple Clips)", "📄 Flyer Creator", "⬜ Blank Sheet"],
     horizontal=True,
-    index=0
+    index=5  # <-- Blank Sheet is the default
 )
 
 st.markdown("---")
@@ -116,7 +116,6 @@ if mode == "🎨 AI Generation (Text)":
         value=st.session_state.get("prompt", ""),
         key="prompt_input"
     )
-    # Show character count warning
     if prompt:
         char_count = len(prompt)
         if char_count > 450:
@@ -177,9 +176,10 @@ Impressions Grand Format""",
     )
 
 elif mode == "⬜ Blank Sheet":
-    st.markdown("### ⬜ Generate a blank white sheet")
-    st.info("This mode creates a solid white canvas of the selected width and height. You can optionally add text and logo overlays below.")
-    st.caption("💡 Use this to create a clean background for further editing or printing.")
+    st.markdown("### ⬜ Generate a blank white sheet with your text")
+    st.success("✅ This mode creates a **solid white background** with **only your title and subtitle** – no extra graphics, no AI, no logo unless you upload one.")
+    st.caption("💡 Enter your title and subtitle below, choose font size/color/position, and click **Generate**.")
+    # No extra inputs needed – text overlay fields are below.
 
 st.markdown("---")
 
@@ -197,9 +197,9 @@ with col2:
 
 st.markdown("---")
 
-# ====== LOGO OVERLAY ======
+# ====== LOGO OVERLAY (optional – leave empty for blank sheet) ======
 st.markdown("### 🖼️ Logo Overlay (Optional)")
-st.caption("Upload a logo or image to place in a corner. PNG with transparency works best.")
+st.caption("Upload a logo or image to place in a corner. PNG with transparency works best. **Leave empty for a clean white sheet with only text.**")
 col_logo1, col_logo2 = st.columns(2)
 with col_logo1:
     uploaded_logo = st.file_uploader(
@@ -309,14 +309,8 @@ def enhance_prompt(prompt):
     return prompt
 
 def truncate_prompt(prompt, max_length=450):
-    """
-    Clean and truncate prompt to safe length for API calls.
-    Removes newlines and truncates to max_length characters.
-    """
-    # Replace newlines and multiple spaces with single space
     cleaned = ' '.join(prompt.split())
     if len(cleaned) > max_length:
-        # Truncate to max_length and add ellipsis
         cleaned = cleaned[:max_length] + "..."
     return cleaned
 
@@ -340,16 +334,12 @@ def create_placeholder_image(width, height):
     return img
 
 def create_fallback_image(prompt, width, height):
-    """
-    Creates a simple PIL image with the prompt text as a fallback.
-    """
     img = Image.new('RGB', (width, height), color='#1a2a3a')
     draw = ImageDraw.Draw(img)
     try:
         font = get_font(40, bold=True)
     except:
         font = ImageFont.load_default()
-    # Wrap text
     lines = []
     words = prompt.split()
     line = ""
@@ -361,21 +351,17 @@ def create_fallback_image(prompt, width, height):
             line = word
     if line:
         lines.append(line.strip())
-    
     y = 50
     for line in lines:
         draw.text((20, y), line, font=font, fill='#FFFFFF')
         y += 50
-    # Add a note
     draw.text((20, height - 40), "Fallback image - API unavailable", font=font, fill='#FF6600')
     return img
 
 def generate_image(prompt, width, height, style):
-    # First, clean and truncate the prompt
     cleaned_prompt = truncate_prompt(prompt, max_length=450)
     if len(cleaned_prompt) != len(prompt):
-        st.info(f"✂️ Prompt shortened from {len(prompt)} to {len(cleaned_prompt)} characters for API compatibility.")
-
+        st.info(f"✂️ Prompt shortened from {len(prompt)} to {len(cleaned_prompt)} characters.")
     style_map = {
         "Cinematic": "cinematic",
         "Anime": "anime",
@@ -389,12 +375,10 @@ def generate_image(prompt, width, height, style):
     if style_param:
         enhanced_prompt = f"{enhanced_prompt}, {style_param} style"
     encoded = urllib.parse.quote(enhanced_prompt)
-    
     urls = [
         f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true&seed={random.randint(1,999999)}",
         f"https://pollinations.ai/prompt/{encoded}?width={width}&height={height}&nologo=true&seed={random.randint(1,999999)}"
     ]
-    
     for attempt in range(3):
         for url in urls:
             try:
@@ -403,13 +387,11 @@ def generate_image(prompt, width, height, style):
                     st.warning(f"Attempt {attempt+1}: Status {response.status_code}. Retrying...")
                     time.sleep(2)
                     continue
-                
                 content_type = response.headers.get('Content-Type', '')
                 if 'image' not in content_type:
                     st.warning(f"Attempt {attempt+1}: Received non-image content ({content_type}). Retrying...")
                     time.sleep(2)
                     continue
-                
                 try:
                     img = Image.open(io.BytesIO(response.content))
                     return img
@@ -417,14 +399,12 @@ def generate_image(prompt, width, height, style):
                     st.warning(f"Attempt {attempt+1}: Cannot open image: {e}. Retrying...")
                     time.sleep(2)
                     continue
-                    
             except requests.exceptions.Timeout:
                 st.warning(f"Attempt {attempt+1}: Timeout. Retrying...")
                 time.sleep(3)
             except Exception as e:
                 st.warning(f"Attempt {attempt+1}: {e}. Retrying...")
                 time.sleep(2)
-    
     st.warning("Using generated fallback image (API unavailable).")
     return create_fallback_image(prompt, width, height)
 
@@ -432,17 +412,14 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
     img = img.copy()
     w, h = img.size
     draw = ImageDraw.Draw(img)
-    
     title_font = get_font(title_size, bold=True)
     subtitle_font = get_font(subtitle_size, bold=True)
-    
     if position == "Top":
         y_start = int(h * 0.08)
     elif position == "Bottom":
         y_start = int(h * 0.70)
     else:
         y_start = int(h * 0.28)
-    
     temp = Image.new('RGB', (1,1))
     temp_draw = ImageDraw.Draw(temp)
     title_bbox = temp_draw.textbbox((0,0), title, font=title_font) if title else (0,0,0,0)
@@ -451,7 +428,6 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
     title_h = title_bbox[3] - title_bbox[1] if title else 0
     sub_w = subtitle_bbox[2] - subtitle_bbox[0] if subtitle else 0
     sub_h = subtitle_bbox[3] - subtitle_bbox[1] if subtitle else 0
-    
     y = y_start
     if title:
         for offset in range(10, 0, -2):
@@ -464,7 +440,6 @@ def add_text_overlay(img, title, subtitle, title_size, subtitle_size, color, pos
                     draw.text((w//2 - title_w//2 + dx, y+dy), title, font=title_font, fill='black')
         draw.text((w//2 - title_w//2, y), title, font=title_font, fill=color)
         y += title_h + 25
-    
     if subtitle:
         for offset in range(6, 0, -2):
             alpha = int(20 * (offset/6))
@@ -493,63 +468,53 @@ def add_logo_overlay(img, logo_bytes, corner, size_percent):
     except:
         st.warning("Could not open logo file. Skipping logo overlay.")
         return img
-
     img = img.copy()
     w, h = img.size
     logo_w = int(w * size_percent)
     logo_h = int(logo_w * (logo.height / logo.width))
     logo = logo.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
     padding = int(w * 0.02)
-
     if corner == "Top Left":
         x, y = padding, padding
     elif corner == "Top Right":
         x, y = w - logo_w - padding, padding
     elif corner == "Bottom Left":
         x, y = padding, h - logo_h - padding
-    else:  # Bottom Right
+    else:
         x, y = w - logo_w - padding, h - logo_h - padding
-
     if logo.mode == 'RGBA':
         img.paste(logo, (x, y), logo.split()[3])
     else:
         img.paste(logo, (x, y))
     return img
 
-# ====== VIDEO HELPERS ======
+# ====== VIDEO HELPERS (unchanged) ======
 def create_text_image_for_video(width, height, title, subtitle, title_size, subtitle_size, color, position):
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    
     font_title = get_font(title_size, bold=True)
     font_sub = get_font(subtitle_size, bold=True)
-    
     temp = Image.new('RGB', (1, 1))
     temp_draw = ImageDraw.Draw(temp)
-    
     if title:
         bbox = temp_draw.textbbox((0, 0), title, font=font_title)
         title_w = bbox[2] - bbox[0]
         title_h = bbox[3] - bbox[1]
     else:
         title_w = title_h = 0
-        
     if subtitle:
         bbox = temp_draw.textbbox((0, 0), subtitle, font=font_sub)
         sub_w = bbox[2] - bbox[0]
         sub_h = bbox[3] - bbox[1]
     else:
         sub_w = sub_h = 0
-    
     if position == "Top":
         y_start = int(height * 0.08)
     elif position == "Bottom":
         y_start = int(height * 0.70)
     else:
         y_start = int(height * 0.28)
-    
     y = y_start
-    
     if title:
         x = (width - title_w) // 2
         for dx in range(-4, 5, 2):
@@ -558,7 +523,6 @@ def create_text_image_for_video(width, height, title, subtitle, title_size, subt
                     draw.text((x + dx, y + dy), title, font=font_title, fill='black')
         draw.text((x, y), title, font=font_title, fill=color)
         y += title_h + 25
-    
     if subtitle:
         x = (width - sub_w) // 2
         for dx in range(-3, 4, 2):
@@ -566,7 +530,6 @@ def create_text_image_for_video(width, height, title, subtitle, title_size, subt
                 if dx != 0 or dy != 0:
                     draw.text((x + dx, y + dy), subtitle, font=font_sub, fill='black')
         draw.text((x, y), subtitle, font=font_sub, fill=color)
-    
     return img
 
 def apply_audio_fade(audio_clip, fade_duration=2.0):
@@ -593,27 +556,22 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
     except ImportError:
         st.error("MoviePy is not installed. Please run: pip install moviepy")
         return None
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_input:
         tmp_input.write(video_file.read())
         input_path = tmp_input.name
-
     try:
         clip = VideoFileClip(input_path)
         if clip.duration > 60:
             st.warning(f"Video is {clip.duration:.1f}s long. Processing only the first 60 seconds.")
             clip = clip.subclip(0, 60)
-
         w, h = clip.size
         clips_to_composite = [clip]
-
         text_pil = create_text_image_for_video(
             w, h, title, subtitle, title_size, subtitle_size, color, position
         )
         text_np = np.array(text_pil)
         text_clip = ImageClip(text_np).set_duration(clip.duration).set_position((0, 0))
         clips_to_composite.append(text_clip)
-
         if logo_bytes is not None:
             try:
                 logo_pil = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
@@ -635,9 +593,7 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
                 clips_to_composite.append(logo_clip)
             except Exception as e:
                 st.warning(f"Could not add logo to video: {e}")
-
         final_clip = CompositeVideoClip(clips_to_composite)
-
         if audio_bytes is not None:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_audio:
                 tmp_audio.write(audio_bytes)
@@ -648,9 +604,7 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
                     bg_audio = bg_audio.loop(duration=final_clip.duration)
                 else:
                     bg_audio = bg_audio.subclip(0, final_clip.duration)
-                
                 bg_audio = apply_audio_fade(bg_audio, fade_duration=2.0)
-                
                 if mute_original:
                     final_clip = final_clip.set_audio(bg_audio)
                 else:
@@ -666,10 +620,8 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
             finally:
                 if os.path.exists(audio_path):
                     os.unlink(audio_path)
-
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_output:
             output_path = tmp_output.name
-
         final_clip.write_videofile(
             output_path,
             fps=clip.fps,
@@ -681,7 +633,6 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
             logger=None
         )
         return output_path
-
     except Exception as e:
         st.error(f"Video processing error: {e}")
         return None
@@ -689,7 +640,7 @@ def process_video_with_overlay(video_file, title, subtitle, title_size, subtitle
         if os.path.exists(input_path):
             os.unlink(input_path)
 
-# ====== SLIDESHOW ======
+# ====== SLIDESHOW (unchanged) ======
 def resize_clip_with_pil(clip, target_w, target_h):
     def resize_frame(frame):
         pil_img = Image.fromarray(frame)
@@ -708,15 +659,12 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
     except ImportError:
         st.error("MoviePy is not installed. Please run: pip install moviepy")
         return None
-
     if not uploaded_files:
         st.warning("No files uploaded.")
         return None
-
     clip_infos = []
     temp_paths = []
     first_video_fps = 24
-
     for file_obj in uploaded_files:
         ext = os.path.splitext(file_obj.name)[1].lower()
         if ext in ['.mp4', '.avi', '.mov', '.mkv', '.webm']:
@@ -748,14 +696,11 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
                 continue
         else:
             st.warning(f"Unsupported file type: {file_obj.name}")
-
     if not clip_infos:
         st.error("No valid clips to create slideshow.")
         return None
-
     target_w = width
     target_h = height
-
     resized_clips = []
     is_video_flags = []
     for clip, is_video in clip_infos:
@@ -763,9 +708,7 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
             clip = resize_clip_with_pil(clip, target_w, target_h)
         resized_clips.append(clip)
         is_video_flags.append(is_video)
-
     total_dur = sum(c.duration for c in resized_clips)
-
     bg_audio_full = None
     if audio_bytes is not None:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_audio:
@@ -782,13 +725,11 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
         except Exception as e:
             st.warning(f"Could not load background audio: {e}")
             bg_audio_full = None
-
     final_clips = []
     current_time = 0.0
     for idx, (clip, is_video) in enumerate(zip(resized_clips, is_video_flags)):
         seg_duration = clip.duration
         audio_track = None
-
         if bg_audio_full is not None:
             bg_seg = bg_audio_full.subclip(current_time, current_time + seg_duration)
             if is_video:
@@ -798,7 +739,6 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
             bg_seg = bg_seg.volumex(bg_vol)
         else:
             bg_seg = None
-
         if is_video:
             orig_audio = clip.audio
             if orig_audio is not None and bg_seg is not None:
@@ -814,24 +754,19 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
                 audio_track = bg_seg
             else:
                 audio_track = None
-
         if audio_track is not None:
             clip = clip.set_audio(audio_track)
         else:
             clip = clip.set_audio(None)
-
         final_clips.append(clip)
         current_time += seg_duration
-
     final_video = concatenate_videoclips(final_clips, method="compose")
-
     text_pil = create_text_image_for_video(
         target_w, target_h, title, subtitle, title_size, subtitle_size, color, position
     )
     text_np = np.array(text_pil)
     text_clip = ImageClip(text_np).set_duration(final_video.duration).set_position((0, 0))
     overlays = [final_video, text_clip]
-
     if logo_bytes is not None:
         try:
             logo_pil = Image.open(io.BytesIO(logo_bytes)).convert("RGBA")
@@ -853,18 +788,14 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
             overlays.append(logo_clip)
         except Exception as e:
             st.warning(f"Could not add logo to slideshow: {e}")
-
     final_composite = CompositeVideoClip(overlays)
-
     fps = first_video_fps
     for c in resized_clips:
         if hasattr(c, 'fps') and c.fps:
             fps = c.fps
             break
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_output:
         output_path = tmp_output.name
-
     final_composite.write_videofile(
         output_path,
         fps=fps,
@@ -875,25 +806,21 @@ def create_slideshow(uploaded_files, image_duration, audio_bytes,
         verbose=False,
         logger=None
     )
-
     for path in temp_paths:
         if os.path.exists(path):
             try:
                 os.unlink(path)
             except:
                 pass
-
     return output_path
 
-# ====== FLYER GENERATOR ======
+# ====== FLYER GENERATOR (unchanged) ======
 def generate_flyer(company_name, subtitle, services_list, canvas_width, canvas_height):
     img = Image.new('RGB', (canvas_width, canvas_height), color='white')
     draw = ImageDraw.Draw(img)
-
     orange = "#FF6600"
     black = "#000000"
     dark_gray = "#333333"
-
     try:
         font_large = get_font(100, bold=True)
         font_medium = get_font(60, bold=True)
@@ -904,25 +831,14 @@ def generate_flyer(company_name, subtitle, services_list, canvas_width, canvas_h
         font_medium = ImageFont.load_default()
         font_small = ImageFont.load_default()
         font_service = ImageFont.load_default()
-
     center_x = canvas_width // 2
-
-    # Logo
     shadow_offset = 4
     draw.text((center_x - shadow_offset, 60 - shadow_offset), company_name, font=font_large, fill='black')
     draw.text((center_x, 60), company_name, font=font_large, fill=orange)
-
-    # Header
     draw.text((center_x, 180), "SERIGRAPHIE", font=font_medium, fill=orange)
-
-    # Subtitle
     draw.text((center_x, 270), subtitle, font=font_small, fill=dark_gray)
-
-    # Separator line
     line_y = 330
     draw.line((canvas_width//4, line_y, canvas_width*3//4, line_y), fill=orange, width=3)
-
-    # Services
     service_start_y = 380
     line_spacing = 55
     for i, service in enumerate(services_list):
@@ -933,11 +849,8 @@ def generate_flyer(company_name, subtitle, services_list, canvas_width, canvas_h
         bullet_x = canvas_width // 4 - 30
         draw.ellipse((bullet_x - bullet_radius, y - bullet_radius, bullet_x + bullet_radius, y + bullet_radius), fill=orange)
         draw.text((canvas_width//4 + 10, y - 15), service.strip(), font=font_service, fill=black)
-
-    # Footer
     footer_y = canvas_height - 60
     draw.text((center_x, footer_y), "Contact: (509) 4738-5663 | deslandes78@gmail.com", font=font_service, fill=dark_gray)
-
     return img
 
 # ====== MAIN GENERATION LOGIC ======
@@ -971,7 +884,6 @@ if generate:
                     if overlay_title or overlay_subtitle:
                         img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
                     img = add_logo_overlay(img, uploaded_logo.read() if uploaded_logo else None, logo_corner, logo_size_percent)
-                    
                     st.markdown("### ✨ Generated Design")
                     col_display, col_info = st.columns([2, 1])
                     with col_display:
@@ -1026,7 +938,6 @@ if generate:
                 if overlay_title or overlay_subtitle:
                     img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
                 img = add_logo_overlay(img, uploaded_logo.read() if uploaded_logo else None, logo_corner, logo_size_percent)
-                
                 st.markdown("### ✨ Designed Image")
                 col_display, col_info = st.columns([2, 1])
                 with col_display:
@@ -1156,7 +1067,6 @@ if generate:
             )
             if uploaded_logo is not None:
                 img = add_logo_overlay(img, uploaded_logo.read(), logo_corner, logo_size_percent)
-
             st.markdown("### 📄 Your Professional Flyer")
             col_display, col_info = st.columns([2, 1])
             with col_display:
@@ -1198,19 +1108,19 @@ if generate:
             if len(st.session_state.history) > 20:
                 st.session_state.history = st.session_state.history[-20:]
 
-    # ----- NEW: Blank Sheet -----
+    # ----- Blank Sheet (default) -----
     elif mode == "⬜ Blank Sheet":
-        with st.spinner("⬜ Generating blank white sheet..."):
+        with st.spinner("⬜ Generating blank white sheet with your text..."):
             # Create solid white image
             img = Image.new('RGB', (width, height), color='white')
-            # Apply text overlay if user provided text
+            # Apply text overlay (title/subtitle) – this is what the user wants
             if overlay_title or overlay_subtitle:
                 img = add_text_overlay(img, overlay_title, overlay_subtitle, title_font_size, subtitle_font_size, text_color, text_position)
-            # Apply logo if uploaded
+            # Optionally add logo if uploaded (but user can leave empty)
             if uploaded_logo is not None:
                 img = add_logo_overlay(img, uploaded_logo.read(), logo_corner, logo_size_percent)
 
-            st.markdown("### ⬜ Blank Sheet")
+            st.markdown("### ⬜ Your White Sheet")
             col_display, col_info = st.columns([2, 1])
             with col_display:
                 st.image(img, use_column_width=True)
@@ -1232,16 +1142,16 @@ if generate:
                 bg_img.save(buf, format="PNG")
                 byte_im = buf.getvalue()
                 st.download_button(
-                    label="⬇️ Download Blank Sheet",
+                    label="⬇️ Download White Sheet",
                     data=byte_im,
-                    file_name=f"blank_{int(time.time())}.png",
+                    file_name=f"white_sheet_{int(time.time())}.png",
                     mime="image/png",
                     use_container_width=True
                 )
             if "history" not in st.session_state:
                 st.session_state.history = []
             st.session_state.history.append({
-                "prompt": f"Blank Sheet {width}x{height}",
+                "prompt": f"White Sheet {width}x{height}",
                 "image": img,
                 "timestamp": time.time(),
                 "style": "Blank",
