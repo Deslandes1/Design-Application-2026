@@ -97,6 +97,9 @@ service_lines_input = ""
 service_font_size = 30
 service_line_spacing = 50
 service_bullets = True
+contact_phone = ""
+contact_email = ""
+contact_address = ""
 
 if mode == "🎨 AI Generation (Text)":
     st.markdown("Describe your dream design – I'll bring it to life.")
@@ -183,10 +186,10 @@ Impressions Grand Format""",
 elif mode in ["⬜ Blank Sheet", "🟦 Color Sheet"]:
     if mode == "⬜ Blank Sheet":
         st.markdown("### ⬜ Generate a blank white sheet with your text")
-        st.success("✅ This mode creates a **solid white background** with your title, subtitle, and optional service list.")
+        st.success("✅ This mode creates a **solid white background** with your title, subtitle, service list, and contact info.")
     else:
         st.markdown("### 🟦 Generate a solid color sheet with your text")
-        st.success("✅ Choose any background color, add title/subtitle, and a service list.")
+        st.success("✅ Choose any background color, add title/subtitle, service list, and contact info.")
         color_sheet_bg = st.color_picker("Pick a background color", value="#FF6600", key="color_sheet_bg")
         st.caption(f"💡 Selected color: {color_sheet_bg}")
     
@@ -204,6 +207,15 @@ elif mode in ["⬜ Blank Sheet", "🟦 Color Sheet"]:
         service_line_spacing = st.slider("Line spacing", 20, 80, 50, key="service_spacing")
     with col2:
         service_bullets = st.checkbox("Add bullet points", value=True, key="service_bullets")
+    
+    st.markdown("---")
+    st.markdown("### 📞 Contact Information (optional)")
+    col_contact1, col_contact2 = st.columns(2)
+    with col_contact1:
+        contact_phone = st.text_input("Phone number", placeholder="e.g. +509 4738-5663", key="contact_phone")
+        contact_email = st.text_input("Email", placeholder="e.g. contact@belikebrit.org", key="contact_email")
+    with col_contact2:
+        contact_address = st.text_input("Address (optional)", placeholder="e.g. Grand-Goâve, Haiti", key="contact_address")
 
 st.markdown("---")
 
@@ -514,7 +526,45 @@ def add_service_lines(img, lines, font_size, line_spacing, color, start_y, bulle
         else:
             draw.text((margin, y - font_size//2), line.strip(), font=font, fill=color)
         y += line_spacing
-    return img
+    return img, y  # return final y position after services
+
+def add_contact_info(img, phone, email, address, color, y_start=None):
+    """
+    Draw contact information centered at the bottom of the image.
+    If y_start is None, will place at bottom with padding.
+    """
+    img = img.copy()
+    w, h = img.size
+    draw = ImageDraw.Draw(img)
+    font = get_font(28, bold=False)
+    # Build contact lines
+    lines = []
+    if phone:
+        lines.append(f"📞 {phone}")
+    if email:
+        lines.append(f"✉️ {email}")
+    if address:
+        lines.append(f"📍 {address}")
+    if not lines:
+        return img, None
+    
+    # Calculate total height
+    total_height = len(lines) * 35  # approx line height
+    if y_start is None:
+        y_start = h - total_height - 40  # 40px padding from bottom
+    # Ensure we don't go below bottom
+    if y_start + total_height > h:
+        y_start = h - total_height - 10
+    
+    y = y_start
+    for line in lines:
+        # center the line
+        line_width = draw.textlength(line, font=font)
+        x = (w - line_width) // 2
+        draw.text((x, y), line, font=font, fill=color)
+        y += 35
+    
+    return img, y_start
 
 def add_background(img, bg_color, output_size=(1200, 1200)):
     canvas = Image.new('RGB', output_size, bg_color)
@@ -1179,7 +1229,7 @@ if generate:
             if len(st.session_state.history) > 20:
                 st.session_state.history = st.session_state.history[-20:]
 
-    # ----- Blank Sheet (with service lines) -----
+    # ----- Blank Sheet (with service lines & contact info) -----
     elif mode == "⬜ Blank Sheet":
         with st.spinner("⬜ Generating blank white sheet with your text..."):
             img = Image.new('RGB', (width, height), color='white')
@@ -1192,7 +1242,16 @@ if generate:
             service_lines = [line for line in service_lines_input.split('\n') if line.strip()]
             if service_lines:
                 start_y = y_after_text + 30
-                img = add_service_lines(img, service_lines, service_font_size, service_line_spacing, text_color, start_y, bullets=service_bullets)
+                img, y_after_services = add_service_lines(img, service_lines, service_font_size, service_line_spacing, text_color, start_y, bullets=service_bullets)
+            else:
+                y_after_services = y_after_text + 30
+            
+            # Add contact info at the bottom
+            if contact_phone or contact_email or contact_address:
+                # Place contact info after services with a small gap, or at bottom if no services
+                contact_start = y_after_services + 40
+                # Ensure it fits within the image
+                img, _ = add_contact_info(img, contact_phone, contact_email, contact_address, text_color, y_start=contact_start)
             
             if uploaded_logo is not None:
                 img = add_logo_overlay(img, uploaded_logo.read(), logo_corner, logo_size_percent)
@@ -1238,7 +1297,7 @@ if generate:
             if len(st.session_state.history) > 20:
                 st.session_state.history = st.session_state.history[-20:]
 
-    # ----- Color Sheet (with service lines) -----
+    # ----- Color Sheet (with service lines & contact info) -----
     elif mode == "🟦 Color Sheet":
         with st.spinner("🟦 Generating your custom color sheet with text..."):
             img = Image.new('RGB', (width, height), color=color_sheet_bg)
@@ -1251,7 +1310,14 @@ if generate:
             service_lines = [line for line in service_lines_input.split('\n') if line.strip()]
             if service_lines:
                 start_y = y_after_text + 30
-                img = add_service_lines(img, service_lines, service_font_size, service_line_spacing, text_color, start_y, bullets=service_bullets)
+                img, y_after_services = add_service_lines(img, service_lines, service_font_size, service_line_spacing, text_color, start_y, bullets=service_bullets)
+            else:
+                y_after_services = y_after_text + 30
+            
+            # Add contact info
+            if contact_phone or contact_email or contact_address:
+                contact_start = y_after_services + 40
+                img, _ = add_contact_info(img, contact_phone, contact_email, contact_address, text_color, y_start=contact_start)
             
             if uploaded_logo is not None:
                 img = add_logo_overlay(img, uploaded_logo.read(), logo_corner, logo_size_percent)
